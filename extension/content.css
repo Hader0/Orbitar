@@ -1,0 +1,17 @@
+/* content.css */
+.orbitar-icon {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  z-index: 99999;
+  background-image: url("chrome-extension://__MSG_@@extension_id__/icons/icon48.png");
+  background-size: cover;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.orbitar-icon:hover {
+  transform: scale(1.1);
+}
