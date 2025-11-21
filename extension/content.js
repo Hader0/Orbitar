@@ -2,240 +2,535 @@
 
 let activeElement = null;
 let orbitarIcon = null;
-let shadowHost = null;
-let shadowRoot = null;
+let toolbarHost = null;
+let toolbarRoot = null;
 
-// --- 1. Focus Detection & Icon Injection ---
+// Template taxonomy for UI
+const ORBITAR_TEMPLATE_GROUPS = {
+  coding: [
+    { value: "coding_feature", label: "Implement feature" },
+    { value: "coding_debug", label: "Debug / fix bug" },
+    { value: "coding_refactor", label: "Refactor / improve" },
+    { value: "coding_tests", label: "Write tests" },
+    { value: "coding_explain", label: "Explain code" },
+  ],
+  writing: [
+    { value: "writing_blog", label: "Blog post" },
+    { value: "writing_twitter_thread", label: "Twitter/X thread" },
+    { value: "writing_linkedin_post", label: "LinkedIn post" },
+    { value: "writing_email", label: "Email" },
+    { value: "writing_landing_page", label: "Landing page copy" },
+  ],
+  research: [
+    { value: "research_summarize", label: "Summarize" },
+    { value: "research_compare", label: "Compare options" },
+    { value: "research_extract_points", label: "Extract key points" },
+  ],
+  planning: [
+    { value: "planning_roadmap", label: "Roadmap / plan" },
+    { value: "planning_feature_spec", label: "Feature spec" },
+    { value: "planning_meeting_notes", label: "Meeting notes" },
+  ],
+  communication: [
+    { value: "communication_reply", label: "Reply" },
+    { value: "communication_tone_adjust", label: "Adjust tone" },
+  ],
+  creative: [
+    { value: "creative_story", label: "Story / scene" },
+    { value: "creative_brainstorm", label: "Brainstorm ideas" },
+  ],
+  general: [{ value: "general_general", label: "General prompt" }],
+};
 
-document.addEventListener('focusin', (e) => {
+const ORBITAR_DEFAULT_CATEGORY = "general";
+const ORBITAR_DEFAULT_TEMPLATE_ID = "general_general";
+
+// --- Helper: Check if element is editable ---
+function isEditable(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "TEXTAREA") return true;
+  if (tag === "INPUT") {
+    const type = (el.type || "text").toLowerCase();
+    const textTypes = ["text", "search", "email", "url", "tel", "password"];
+    return textTypes.includes(type);
+  }
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+// --- Focus detection & Icon Management ---
+
+document.addEventListener("focusin", (e) => {
   const target = e.target;
   if (isEditable(target)) {
     activeElement = target;
     showIcon(target);
+  } else {
+    // Delay hiding to allow clicking the icon
+    setTimeout(() => {
+      if (
+        document.activeElement !== target &&
+        !toolbarHost?.contains(document.activeElement)
+      ) {
+        activeElement = null;
+        hideIcon();
+        removeToolbar();
+      }
+    }, 200);
   }
 });
 
-document.addEventListener('focusout', (e) => {
-  // Delay hiding to allow clicking the icon
-  setTimeout(() => {
-    if (activeElement === e.target && !shadowHost?.contains(document.activeElement)) {
-      hideIcon();
+// Reposition on scroll/resize
+window.addEventListener(
+  "scroll",
+  () => {
+    if (activeElement) {
+      if (orbitarIcon) positionIcon(activeElement);
+      if (toolbarHost) positionToolbar(activeElement);
     }
-  }, 200);
-});
+  },
+  true
+);
 
-function isEditable(el) {
-  return el.tagName === 'TEXTAREA' || 
-         (el.tagName === 'INPUT' && el.type === 'text') || 
-         el.isContentEditable;
-}
+window.addEventListener("resize", () => {
+  if (activeElement) {
+    if (orbitarIcon) positionIcon(activeElement);
+    if (toolbarHost) positionToolbar(activeElement);
+  }
+});
 
 function showIcon(target) {
   if (!orbitarIcon) {
-    createIcon();
-  }
-  
-  const rect = target.getBoundingClientRect();
-  // Position icon at top-right of the input
-  const top = rect.top + window.scrollY + 5;
-  const left = rect.right + window.scrollX - 30;
+    orbitarIcon = document.createElement("div");
+    orbitarIcon.className = "orbitar-icon";
 
-  orbitarIcon.style.display = 'block';
-  orbitarIcon.style.top = `${top}px`;
-  orbitarIcon.style.left = `${left}px`;
+    const img = document.createElement("img");
+    img.src = chrome.runtime.getURL("icons/icon48.png");
+    img.alt = "Orbitar";
+    orbitarIcon.appendChild(img);
+
+    // Prevent focus loss when clicking icon
+    orbitarIcon.addEventListener("mousedown", (e) => e.preventDefault());
+    orbitarIcon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleToolbar();
+    });
+
+    document.body.appendChild(orbitarIcon);
+  }
+
+  positionIcon(target);
+  orbitarIcon.style.display = "flex";
 }
 
 function hideIcon() {
   if (orbitarIcon) {
-    orbitarIcon.style.display = 'none';
+    orbitarIcon.style.display = "none";
   }
 }
 
-function createIcon() {
-  orbitarIcon = document.createElement('div');
-  orbitarIcon.className = 'orbitar-icon';
-  orbitarIcon.title = 'Refine with Orbitar';
-  document.body.appendChild(orbitarIcon);
+function positionIcon(target) {
+  if (!orbitarIcon || !target) return;
+  const rect = target.getBoundingClientRect();
+  const scrollX = window.scrollX || window.pageXOffset || 0;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
 
-  orbitarIcon.addEventListener('mousedown', (e) => {
-    e.preventDefault(); // Prevent focus loss
-    openRefineModal();
-  });
+  // Position icon inside the right edge of the input
+  const size = 24;
+  const offset = 8;
+
+  // Check if there's space on the right, otherwise float over
+  const top = rect.top + scrollY + offset;
+  const left = rect.right + scrollX - size - offset - 5; // 5px padding from right edge
+
+  orbitarIcon.style.position = "absolute";
+  orbitarIcon.style.top = `${top}px`;
+  orbitarIcon.style.left = `${left}px`;
 }
 
-// --- 2. Refine Modal (Shadow DOM) ---
+// --- Toolbar Logic ---
 
-function openRefineModal() {
-  if (shadowHost) return; // Already open
-
-  let initialText = '';
-  const selection = window.getSelection().toString();
-  
-  if (selection) {
-    initialText = selection;
-  } else if (activeElement) {
-    initialText = activeElement.value || activeElement.innerText || '';
-  }
-
-  if (!initialText.trim()) {
-    alert('Please type or select some text first.');
-    return;
-  }
-
-  createModalUI(initialText);
-}
-
-function createModalUI(initialText) {
-  shadowHost = document.createElement('div');
-  shadowHost.style.position = 'fixed';
-  shadowHost.style.zIndex = '2147483647'; // Max z-index
-  shadowHost.style.top = '0';
-  shadowHost.style.left = '0';
-  
-  shadowRoot = shadowHost.attachShadow({ mode: 'open' });
-  document.body.appendChild(shadowHost);
-
-  const style = document.createElement('style');
-  style.textContent = `
-    .modal-overlay {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
-    }
-    .modal-content {
-      background: white; padding: 20px; border-radius: 12px; width: 400px;
-      font-family: sans-serif; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-    }
-    h2 { margin-top: 0; color: #333; font-size: 18px; }
-    textarea { width: 100%; height: 100px; margin: 10px 0; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;}
-    select { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; }
-    .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
-    button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
-    .btn-primary { background: #6366f1; color: white; }
-    .btn-secondary { background: #e5e7eb; color: #374151; }
-    .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-    .preview-area { background: #f9fafb; padding: 10px; border-radius: 6px; margin-top: 10px; display: none; }
-  `;
-
-  shadowRoot.appendChild(style);
-
-  const container = document.createElement('div');
-  container.className = 'modal-overlay';
-  container.innerHTML = `
-    <div class="modal-content">
-      <h2>Refine with Orbitar</h2>
-      <textarea id="inputText">${initialText}</textarea>
-      
-      <select id="modelStyle">
-        <option value="General AI">General AI Style</option>
-        <option value="Professional">Professional</option>
-        <option value="Casual">Casual</option>
-        <option value="Code">Code Optimized</option>
-      </select>
-
-      <div id="preview" class="preview-area">
-        <strong>Refined:</strong>
-        <p id="refinedText"></p>
-      </div>
-
-      <div class="buttons">
-        <button id="closeBtn" class="btn-secondary">Cancel</button>
-        <button id="refineBtn" class="btn-primary">Refine</button>
-        <button id="replaceBtn" class="btn-primary" style="display:none;">Replace</button>
-      </div>
-    </div>
-  `;
-
-  shadowRoot.appendChild(container);
-
-  // Event Listeners
-  const closeBtn = shadowRoot.getElementById('closeBtn');
-  const refineBtn = shadowRoot.getElementById('refineBtn');
-  const replaceBtn = shadowRoot.getElementById('replaceBtn');
-  const inputText = shadowRoot.getElementById('inputText');
-  const modelStyle = shadowRoot.getElementById('modelStyle');
-  const preview = shadowRoot.getElementById('preview');
-  const refinedTextP = shadowRoot.getElementById('refinedText');
-
-  closeBtn.onclick = closeModal;
-
-  refineBtn.onclick = async () => {
-    refineBtn.textContent = 'Refining...';
-    refineBtn.disabled = true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'REFINE_TEXT',
-        text: inputText.value,
-        modelStyle: modelStyle.value,
-        template: 'General'
-      });
-
-      if (response.error) {
-        alert(response.error);
-      } else {
-        refinedTextP.textContent = response.refinedText;
-        preview.style.display = 'block';
-        refineBtn.style.display = 'none';
-        replaceBtn.style.display = 'block';
-      }
-    } catch (e) {
-      alert('Error communicating with background script');
-    } finally {
-      refineBtn.textContent = 'Refine';
-      refineBtn.disabled = false;
-    }
-  };
-
-  replaceBtn.onclick = () => {
-    const newText = refinedTextP.textContent;
-    replaceUserText(newText);
-    closeModal();
-  };
-}
-
-function closeModal() {
-  if (shadowHost) {
-    document.body.removeChild(shadowHost);
-    shadowHost = null;
-    shadowRoot = null;
+function toggleToolbar() {
+  if (toolbarHost) {
+    removeToolbar();
+  } else {
+    showToolbar();
   }
 }
 
-function replaceUserText(newText) {
+function showToolbar() {
   if (!activeElement) return;
 
-  if (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT') {
-    const start = activeElement.selectionStart;
-    const end = activeElement.selectionEnd;
-    const val = activeElement.value;
+  toolbarHost = document.createElement("div");
+  // Position wrapper absolutely in the body
+  toolbarHost.style.position = "absolute";
+  toolbarHost.style.zIndex = "2147483647";
+  document.body.appendChild(toolbarHost);
+
+  toolbarRoot = toolbarHost.attachShadow({ mode: "closed" });
+
+  const container = document.createElement("div");
+  container.className = "orbitar-toolbar";
+
+  container.innerHTML = `
+    <style>
+      .orbitar-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #202123; /* ChatGPT dark bg */
+        padding: 6px 10px;
+        border-radius: 8px;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.2); /* Shadow upwards */
+        border: 1px solid #444;
+        font-family: 'Söhne', 'Segoe UI', sans-serif;
+        font-size: 13px;
+        color: #ececf1;
+        animation: slideUp 0.15s ease-out;
+        backdrop-filter: blur(8px);
+      }
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      select, .orbitar-inline-select {
+        background: transparent;
+        color: #ececf1;
+        border: none;
+        padding: 4px 20px 4px 4px;
+        font-size: 12px;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+        background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23ececf1%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+        background-repeat: no-repeat;
+        background-position: right 4px center;
+        background-size: 8px;
+      }
+      select:hover, .orbitar-inline-select:hover {
+        color: #fff;
+      }
+      .divider {
+        width: 1px;
+        height: 16px;
+        background: #555;
+        margin: 0 4px;
+      }
+      .orbitar-inline-pill {
+        display: inline-block;
+        background: #374151;
+        color: #d1d5db;
+        border: 1px solid #4b5563;
+        border-radius: 9999px;
+        padding: 2px 8px;
+        font-size: 11px;
+      }
+      button.primary {
+        background: #10a37f; /* ChatGPT Green */
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        margin-left: 4px;
+      }
+      button.primary:hover {
+        background: #1a7f5a;
+      }
+      button.primary:disabled {
+        opacity: 0.7;
+        cursor: wait;
+      }
+      button.close {
+        background: transparent;
+        border: none;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0 6px;
+        display: flex;
+        align-items: center;
+        margin-left: 2px;
+      }
+      button.close:hover {
+        color: #fff;
+      }
+      .error {
+        color: #ef4444;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+    </style>
     
-    // If there was a selection, replace it. Otherwise replace all? 
-    // Let's replace all for now if no selection, or replace selection if exists.
-    if (start !== end) {
-      activeElement.value = val.substring(0, start) + newText + val.substring(end);
-    } else {
-      // Replace all or insert? Let's replace all to be safe/simple for v1
-      activeElement.value = newText;
+    <select id="model" title="Model Style">
+      <option value="gpt-mini">GPT-mini</option>
+      <option value="gpt-5">GPT-5</option>
+      <option value="claude">Claude</option>
+      <option value="gemini">Gemini</option>
+    </select>
+    
+    <div class="divider"></div>
+
+    <select class="orbitar-inline-select" id="orbitar-category" title="Category"></select>
+    <select class="orbitar-inline-select" id="orbitar-template" title="Template"></select>
+    <span class="orbitar-inline-pill" id="orbitar-suggestion" style="display:none;"></span>
+    
+    <button class="primary" id="refine-btn">Refine</button>
+    <button class="close" id="close-btn">&times;</button>
+    <span class="error" id="error-msg"></span>
+  `;
+
+  toolbarRoot.appendChild(container);
+
+  // Event Listeners
+  const refineBtn = container.querySelector("#refine-btn");
+  const closeBtn = container.querySelector("#close-btn");
+  const modelSelect = container.querySelector("#model");
+  const categorySelect = container.querySelector("#orbitar-category");
+  const templateSelect = container.querySelector("#orbitar-template");
+  const suggestionSpan = container.querySelector("#orbitar-suggestion");
+  const errorMsg = container.querySelector("#error-msg");
+
+  // Prevent focus loss but allow interaction with form controls (selects, buttons, inputs)
+  container.addEventListener("mousedown", (e) => {
+    const t = e.target;
+    const tag = t && t.tagName;
+    if (
+      tag !== "SELECT" &&
+      tag !== "BUTTON" &&
+      tag !== "INPUT" &&
+      tag !== "TEXTAREA"
+    ) {
+      e.preventDefault();
     }
-  } else if (activeElement.isContentEditable) {
-    // Simple contentEditable replacement
-    activeElement.innerText = newText;
+  });
+
+  closeBtn.addEventListener("click", removeToolbar);
+
+  // Category/template setup
+  function niceCategoryLabel(key) {
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+  function populateCategoryOptions() {
+    categorySelect.innerHTML = "";
+    Object.keys(ORBITAR_TEMPLATE_GROUPS).forEach((cat) => {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = niceCategoryLabel(cat);
+      categorySelect.appendChild(opt);
+    });
+  }
+  function populateTemplateOptions(cat) {
+    templateSelect.innerHTML = "";
+    const arr = ORBITAR_TEMPLATE_GROUPS[cat] || [];
+    arr.forEach((tpl) => {
+      const opt = document.createElement("option");
+      opt.value = tpl.value;
+      opt.textContent = tpl.label;
+      templateSelect.appendChild(opt);
+    });
+  }
+
+  let userChangedCategory = false;
+  let userChangedTemplate = false;
+
+  populateCategoryOptions();
+  categorySelect.value = ORBITAR_DEFAULT_CATEGORY;
+  populateTemplateOptions(ORBITAR_DEFAULT_CATEGORY);
+  templateSelect.value = ORBITAR_DEFAULT_TEMPLATE_ID;
+
+  categorySelect.addEventListener("change", () => {
+    userChangedCategory = true;
+    populateTemplateOptions(categorySelect.value);
+    suggestionSpan.style.display = "none";
+  });
+  templateSelect.addEventListener("change", () => {
+    userChangedTemplate = true;
+    suggestionSpan.style.display = "none";
+  });
+
+  // Ask backend for classification suggestion if text exists and user hasn't interacted
+  const initialText = getCurrentText();
+  if (initialText && initialText.trim().length > 0) {
+    chrome.runtime.sendMessage(
+      {
+        type: "CLASSIFY_TEXT",
+        text: initialText,
+      },
+      (resp) => {
+        if (chrome.runtime.lastError || !resp || resp.error) {
+          return;
+        }
+        if (userChangedCategory || userChangedTemplate) {
+          return; // respect manual override
+        }
+        const { templateId, category } = resp;
+        if (category && ORBITAR_TEMPLATE_GROUPS[category]) {
+          categorySelect.value = category;
+          populateTemplateOptions(category);
+          const group = ORBITAR_TEMPLATE_GROUPS[category];
+          if (group.some((g) => g.value === templateId)) {
+            templateSelect.value = templateId;
+            suggestionSpan.textContent = `Suggested: ${niceCategoryLabel(
+              category
+            )} → ${
+              group.find((g) => g.value === templateId)?.label || templateId
+            }`;
+            suggestionSpan.style.display = "inline";
+          }
+        }
+      }
+    );
+  }
+
+  refineBtn.addEventListener("click", async () => {
+    const text = getCurrentText();
+    if (!text) {
+      errorMsg.textContent = "No text";
+      return;
+    }
+
+    refineBtn.disabled = true;
+    refineBtn.textContent = "...";
+    errorMsg.textContent = "";
+
+    chrome.runtime.sendMessage(
+      {
+        type: "REFINE_TEXT",
+        text: text,
+        modelStyle: modelSelect.value,
+        templateId: templateSelect.value,
+        category: categorySelect.value,
+      },
+      (response) => {
+        refineBtn.disabled = false;
+        refineBtn.textContent = "Refine";
+
+        if (chrome.runtime.lastError) {
+          errorMsg.textContent =
+            "Orbitar: backend unreachable. Is dev server running?";
+          return;
+        }
+        if (!response) {
+          errorMsg.textContent = "Unexpected error.";
+          return;
+        }
+        if (response.error) {
+          errorMsg.textContent = response.error;
+          return;
+        }
+
+        // Success! Replace text
+        replaceTextInActiveElement(response.refinedText);
+        removeToolbar();
+      }
+    );
+  });
+
+  positionToolbar(activeElement);
+}
+
+function removeToolbar() {
+  if (toolbarHost) {
+    toolbarHost.remove();
+    toolbarHost = null;
+    toolbarRoot = null;
   }
 }
 
-// --- 3. Listen for background triggers (Keyboard Shortcut) ---
+function positionToolbar(target) {
+  if (!toolbarHost || !target) return;
+
+  const rect = target.getBoundingClientRect();
+  const scrollX = window.scrollX || window.pageXOffset || 0;
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+
+  // Position ABOVE the input
+  // "Extend up dynamically"
+  // We need to know the toolbar's height, but it's in Shadow DOM.
+  // We can estimate or measure.
+  const toolbarHeight = 46; // Approx
+  const padding = 8;
+
+  const top = rect.top + scrollY - toolbarHeight - padding;
+  const left = rect.left + scrollX;
+
+  // Ensure it doesn't go off-screen top
+  const finalTop = Math.max(top, scrollY + 10);
+
+  toolbarHost.style.top = `${finalTop}px`;
+  toolbarHost.style.left = `${left}px`;
+  // Ensure it sits above everything
+  toolbarHost.style.zIndex = "2147483647";
+}
+
+// --- Text Manipulation ---
+
+function getCurrentText() {
+  if (!activeElement) return "";
+
+  if (
+    activeElement.tagName === "TEXTAREA" ||
+    activeElement.tagName === "INPUT"
+  ) {
+    const start = activeElement.selectionStart;
+    const end = activeElement.selectionEnd;
+    if (start !== end) {
+      return activeElement.value.substring(start, end);
+    }
+    return activeElement.value;
+  }
+
+  if (activeElement.isContentEditable) {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) {
+      return sel.toString();
+    }
+    return activeElement.innerText;
+  }
+
+  return "";
+}
+
+function replaceTextInActiveElement(newText) {
+  if (!activeElement) return;
+
+  const el = activeElement;
+
+  // Input/Textarea
+  if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+
+    // If there was a selection, replace just that
+    if (start !== end) {
+      const val = el.value;
+      el.value = val.substring(0, start) + newText + val.substring(end);
+    } else {
+      // Otherwise replace all (or insert at cursor? User said "replaces the text in the same field")
+      // Assuming replace ALL if no selection, or replace selection if exists.
+      // But if no selection, "replace text" usually means the whole thing for a "refine" action.
+      el.value = newText;
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  // ContentEditable
+  else if (el.isContentEditable) {
+    // Simple replacement for now
+    el.innerText = newText;
+  }
+}
+
+// --- Keyboard Shortcut ---
 chrome.runtime.onMessage.addListener((request) => {
-  if (request.type === 'TRIGGER_REFINE_MODAL') {
-    // If we have a focused element, use it
+  if (request.type === "TRIGGER_REFINE_MODAL") {
     if (document.activeElement && isEditable(document.activeElement)) {
       activeElement = document.activeElement;
-      openRefineModal();
-    } else {
-      // Try to use selection
-      const selection = window.getSelection().toString();
-      if (selection) {
-        openRefineModal();
-      }
+      toggleToolbar();
     }
   }
 });

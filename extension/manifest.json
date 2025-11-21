@@ -1,27 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Orbitar - AI Prompt Refiner",
-  "version": "1.0.0",
-  "description": "Refine your prompts with AI. Only works on your text.",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage"
-  ],
+  "name": "Orbitar – AI Prompt Refiner",
+  "version": "0.1.0",
+  "description": "Refine your prompts with AI, using only the text you type or select.",
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://getorbitar.com/*",
-    "http://localhost:3000/*"
+    "http://localhost:3000/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3000/*",
+    "http://127.0.0.1:3001/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"]
-    }
-  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -30,6 +22,14 @@
       "128": "icons/icon128.png"
     }
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -41,7 +41,13 @@
         "default": "Ctrl+Shift+P",
         "mac": "Command+Shift+P"
       },
-      "description": "Refine current text"
+      "description": "Refine current text with Orbitar"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon48.png", "content.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

@@ -21,6 +21,8 @@ model User {
   dailyUsageCount   Int       @default(0)
   dailyUsageResetAt DateTime  @default(now())
   stripeCustomerId  String?
+  stripeSubscriptionId String?
+  stripeSubscriptionStatus String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
