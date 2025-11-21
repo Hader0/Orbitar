@@ -285,6 +285,10 @@ const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
  * Lightweight heuristic classifier to improve suggestions without a model call.
  * Returns a non-general TemplateId when clear cues are present, else null.
  */
+/**
+ * Lightweight heuristic classifier to improve suggestions without a model call.
+ * Returns a non-general TemplateId when clear cues are present, else null.
+ */
 function heuristicTemplate(
   text: string
 ): {
@@ -296,167 +300,159 @@ function heuristicTemplate(
 
   const has = (...keys: string[]) => keys.some((k) => t.includes(k));
 
-  // Coding
-  if (
-    has("unit test", "jest", "vitest", "test suite", "write tests", "coverage")
-  ) {
-    return { templateId: "coding_tests", category: "coding", confidence: 0.85 };
+  // --- Coding ---
+  // Keywords: "code", "script", "typescript", "javascript", "node.js", "next.js", "react", "api", "function", "class", "component", "bug", "error", "stack trace", "SQL", "query"
+  const isCodingContext = has(
+    "code",
+    "script",
+    "typescript",
+    "javascript",
+    "node.js",
+    "next.js",
+    "react",
+    "api",
+    "function",
+    "class",
+    "component",
+    "bug",
+    "error",
+    "stack trace",
+    "sql",
+    "query"
+  );
+
+  if (has("test", "unit test", "jest", "vitest", "playwright", "cypress")) {
+    return { templateId: "coding_tests", category: "coding", confidence: 0.9 };
   }
-  if (has("bug", "fix", "stack trace", "exception", "error message", "debug")) {
-    return { templateId: "coding_debug", category: "coding", confidence: 0.85 };
+  if (has("debug", "fix", "bug", "error", "stack trace")) {
+    return { templateId: "coding_debug", category: "coding", confidence: 0.9 };
   }
-  if (
-    has("refactor", "optimize", "improve readability", "cleanup", "performance")
-  ) {
+  if (has("refactor", "clean up", "rewrite", "optimize")) {
     return {
       templateId: "coding_refactor",
       category: "coding",
-      confidence: 0.8,
+      confidence: 0.9,
     };
   }
-  if (
-    has("implement", "build", "add feature", "create component", "scaffold")
-  ) {
+  // If it hits general coding keywords but not specific ones above, default to feature
+  if (isCodingContext) {
     return {
       templateId: "coding_feature",
       category: "coding",
-      confidence: 0.75,
-    };
-  }
-  if (has("explain code", "what does this code", "explain this function")) {
-    return {
-      templateId: "coding_explain",
-      category: "coding",
-      confidence: 0.75,
+      confidence: 0.9,
     };
   }
 
-  // Writing
-  if (has("blog post", "write a post", "article", "outline", "long-form")) {
-    return { templateId: "writing_blog", category: "writing", confidence: 0.8 };
-  }
-  if (has("twitter thread", "x thread", "tweetstorm")) {
+  // --- Writing / Thread ---
+  if (has("twitter thread", "thread on twitter", "x.com", "tweet thread")) {
     return {
       templateId: "writing_twitter_thread",
       category: "writing",
-      confidence: 0.8,
+      confidence: 0.9,
     };
   }
-  if (has("linkedin post", "linkein post", "professional post")) {
+  if (has("blog post", "article")) {
+    return { templateId: "writing_blog", category: "writing", confidence: 0.9 };
+  }
+  if (has("linkedin post", "linkedin")) {
     return {
       templateId: "writing_linkedin_post",
       category: "writing",
-      confidence: 0.75,
+      confidence: 0.9,
     };
   }
-  if (has("draft email", "write an email", "cold email", "follow-up email")) {
+  if (has("email", "cold email", "outreach email")) {
     return {
       templateId: "writing_email",
       category: "writing",
-      confidence: 0.85,
+      confidence: 0.9,
     };
   }
-  if (
-    has(
-      "landing page",
-      "homepage copy",
-      "hero section",
-      "cta",
-      "call to action"
-    )
-  ) {
+  if (has("landing page", "hero section")) {
     return {
       templateId: "writing_landing_page",
       category: "writing",
-      confidence: 0.8,
+      confidence: 0.9,
     };
   }
 
-  // Research
-  if (has("summarize", "tl;dr", "summary", "distill")) {
-    return {
-      templateId: "research_summarize",
-      category: "research",
-      confidence: 0.85,
-    };
-  }
-  if (has("compare", "versus", "vs.", "pros and cons", "trade-offs")) {
-    return {
-      templateId: "research_compare",
-      category: "research",
-      confidence: 0.8,
-    };
-  }
-  if (has("extract key points", "key points", "highlights", "bullet points")) {
-    return {
-      templateId: "research_extract_points",
-      category: "research",
-      confidence: 0.8,
-    };
-  }
-
-  // Planning
-  if (has("roadmap", "milestones", "timeline", "plan phases")) {
-    return {
-      templateId: "planning_roadmap",
-      category: "planning",
-      confidence: 0.75,
-    };
-  }
-  if (
-    has("feature spec", "specification", "acceptance criteria", "requirements")
-  ) {
-    return {
-      templateId: "planning_feature_spec",
-      category: "planning",
-      confidence: 0.8,
-    };
-  }
-  if (has("meeting notes", "action items", "owners", "follow-ups", "minutes")) {
+  // --- Planning / Meetings / Notes ---
+  if (has("meeting notes", "action items", "agenda", "minutes")) {
     return {
       templateId: "planning_meeting_notes",
       category: "planning",
-      confidence: 0.8,
+      confidence: 0.9,
+    };
+  }
+  if (has("feature spec", "specification", "prd", "requirements")) {
+    return {
+      templateId: "planning_feature_spec",
+      category: "planning",
+      confidence: 0.9,
+    };
+  }
+  if (has("roadmap", "plan", "milestones", "timeline")) {
+    return {
+      templateId: "planning_roadmap",
+      category: "planning",
+      confidence: 0.9,
     };
   }
 
-  // Communication
-  if (has("reply", "respond", "response", "answer back")) {
+  // --- Research / Summarize ---
+  if (has("summarize", "summary", "tl;dr")) {
+    return {
+      templateId: "research_summarize",
+      category: "research",
+      confidence: 0.9,
+    };
+  }
+  if (has("compare", "pros and cons")) {
+    return {
+      templateId: "research_compare",
+      category: "research",
+      confidence: 0.9,
+    };
+  }
+  if (has("extract key points", "key takeaways")) {
+    return {
+      templateId: "research_extract_points",
+      category: "research",
+      confidence: 0.9,
+    };
+  }
+
+  // --- Communication ---
+  if (
+    has("reply to this", "respond to this", "answer this email", "answer this message")
+  ) {
     return {
       templateId: "communication_reply",
       category: "communication",
-      confidence: 0.7,
+      confidence: 0.9,
     };
   }
-  if (
-    has(
-      "adjust tone",
-      "more formal",
-      "more polite",
-      "friendlier",
-      "rewrite in a formal tone"
-    )
-  ) {
+  if (has("more polite", "more formal", "more casual", "adjust tone")) {
     return {
       templateId: "communication_tone_adjust",
       category: "communication",
-      confidence: 0.75,
+      confidence: 0.9,
     };
   }
 
-  // Creative
-  if (has("story", "scene", "character", "plot", "narrative")) {
+  // --- Creative ---
+  if (has("story", "scene", "character", "worldbuilding", "plot")) {
     return {
       templateId: "creative_story",
       category: "creative",
-      confidence: 0.75,
+      confidence: 0.9,
     };
   }
-  if (has("brainstorm", "ideas", "ideate", "suggest ideas")) {
+  if (has("brainstorm ideas", "ideas for", "concepts for")) {
     return {
       templateId: "creative_brainstorm",
       category: "creative",
-      confidence: 0.75,
+      confidence: 0.9,
     };
   }
 
@@ -476,7 +472,7 @@ export async function classifyTemplate(text: string): Promise<{
   const h = heuristicTemplate(text);
   if (h) return h;
 
-  // 2) If no OpenAI key, fall back to general (or heuristic already returned)
+  // 2) If no OpenAI key, fall back to general
   if (!process.env.OPENAI_API_KEY) {
     return {
       templateId: "general_general",
@@ -486,12 +482,28 @@ export async function classifyTemplate(text: string): Promise<{
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const ids = Object.keys(templateRegistry) as TemplateId[];
-  const idList = ids.join(", ");
+  
+  const system = `You are a classifier that maps user instructions to a templateId.
 
-  const system = `You are a classifier that maps user tasks to a template ID.
-You MUST respond with exactly one JSON object, no prose:
-{"templateId":"<one-of: ${idList}>","confidence":0.0-1.0}`;
+You MUST respond with exactly one JSON object, no extra text, in this form:
+{"templateId": "...", "confidence": 0.0-1.0}
+
+Allowed templateId values:
+- "coding_feature", "coding_debug", "coding_refactor", "coding_tests", "coding_explain"
+- "writing_blog", "writing_twitter_thread", "writing_linkedin_post", "writing_email", "writing_landing_page"
+- "research_summarize", "research_compare", "research_extract_points"
+- "planning_roadmap", "planning_feature_spec", "planning_meeting_notes"
+- "communication_reply", "communication_tone_adjust"
+- "creative_story", "creative_brainstorm"
+- "general_general"
+
+Guidance:
+- If the text clearly describes writing code, scripts, APIs, debugging, tests, or refactoring → choose a "coding_*" template.
+- If it clearly describes a blog/article, email, social post, or marketing copy → choose a "writing_*" template.
+- If it clearly describes summarizing, extracting points, or comparing → choose a "research_*" template.
+- If it clearly describes plans, specs, roadmaps, or meeting notes → choose a "planning_*" template.
+- Only use "general_general" when none of the more specific templates clearly applies.
+- Do not invent new templateId values.`;
 
   const messages = [
     { role: "system" as const, content: system },
@@ -527,17 +539,11 @@ You MUST respond with exactly one JSON object, no prose:
         confidence = Math.max(0, Math.min(1, parsed.confidence));
       }
     }
-    // If model returns low-confidence general, try heuristic again (conservative)
-    if (templateId === "general_general" && confidence < 0.6) {
-      const hh = heuristicTemplate(text);
-      if (hh) return hh;
-    }
+    
     const category = templateRegistry[templateId].category;
     return { templateId, category, confidence };
   } catch (err) {
-    // Fallback to heuristic or general
-    const hh = heuristicTemplate(text);
-    if (hh) return hh;
+    // Fallback to general
     return {
       templateId: "general_general",
       category: "general",
