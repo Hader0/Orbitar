@@ -5,6 +5,44 @@ let orbitarIcon = null;
 let toolbarHost = null;
 let toolbarRoot = null;
 
+/**
+ * Safe messaging to background with retry to handle transient "Extension context invalidated"
+ * errors when the service worker reloads. Retries a couple of times with small delay.
+ */
+function sendMessageSafe(message, callback, retries = 2, delayMs = 400) {
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        if (retries > 0) {
+          setTimeout(
+            () => sendMessageSafe(message, callback, retries - 1, delayMs),
+            delayMs
+          );
+        } else {
+          callback &&
+            callback({
+              error:
+                chrome.runtime.lastError.message ||
+                "Extension messaging failed.",
+            });
+        }
+        return;
+      }
+      callback && callback(response);
+    });
+  } catch (err) {
+    if (retries > 0) {
+      setTimeout(
+        () => sendMessageSafe(message, callback, retries - 1, delayMs),
+        delayMs
+      );
+    } else {
+      console.error("Orbitar messaging error:", err);
+      callback && callback({ error: "Extension messaging failed." });
+    }
+  }
+}
+
 // Template taxonomy for UI
 const ORBITAR_TEMPLATE_GROUPS = {
   coding: [
@@ -286,6 +324,53 @@ function showToolbar() {
 
   toolbarRoot.appendChild(container);
 
+  // Add visual overrides for a more OpenAI-like look and feel
+  try {
+    const override = document.createElement("style");
+    override.textContent = `
+      .orbitar-toolbar {
+        background: linear-gradient(180deg, #23242a 0%, #1f2026 100%) !important;
+        border: 1px solid #2a2b32 !important;
+        box-shadow: 0 12px 40px rgba(0,0,0,.40), 0 1px 0 rgba(255,255,255,0.02) inset !important;
+        padding: 10px 12px !important;
+        gap: 10px !important;
+      }
+      .orbitar-inline-select {
+        background: #2a2b32 !important;
+        color: #ececf1 !important;
+        border: 1px solid #3a3b45 !important;
+        border-radius: 8px !important;
+        padding: 6px 28px 6px 10px !important;
+        font-size: 12px !important;
+      }
+      .orbitar-inline-select:hover {
+        border-color: #4b4c57 !important;
+      }
+      button.primary {
+        height: 30px !important;
+        padding: 0 14px !important;
+        border-radius: 8px !important;
+        font-size: 12px !important;
+        background: #10a37f !important;
+        color: #fff !important;
+        border: 1px solid #0e8d6d !important;
+      }
+      button.primary:hover {
+        background: #0e8d6d !important;
+      }
+      .orbitar-inline-pill {
+        background: #2a2b32 !important;
+        border-color: #3a3b45 !important;
+      }
+    `;
+    container.appendChild(override);
+  } catch (_e) {}
+
+  // Defer an extra layout pass so positioning can use measured height/width
+  requestAnimationFrame(() => {
+    positionToolbar(activeElement);
+  });
+
   // Event Listeners
   const refineBtn = container.querySelector("#refine-btn");
   const closeBtn = container.querySelector("#close-btn");
@@ -356,18 +441,19 @@ function showToolbar() {
   // Ask backend for classification suggestion if text exists and user hasn't interacted
   const initialText = getCurrentText();
   if (initialText && initialText.trim().length > 0) {
-    chrome.runtime.sendMessage(
+    sendMessageSafe(
       {
         type: "CLASSIFY_TEXT",
         text: initialText,
       },
       (resp) => {
-        if (chrome.runtime.lastError || !resp || resp.error) {
+        if (!resp || resp.error) {
+          try {
+            console.error("Orbitar classify -> error", resp);
+          } catch (_e) {}
           return;
         }
-        if (userChangedCategory || userChangedTemplate) {
-          return; // respect manual override
-        }
+        if (userChangedCategory || userChangedTemplate) return; // respect manual override
         const { templateId, category } = resp;
         if (category && ORBITAR_TEMPLATE_GROUPS[category]) {
           categorySelect.value = category;
@@ -397,8 +483,20 @@ function showToolbar() {
     refineBtn.disabled = true;
     refineBtn.textContent = "...";
     errorMsg.textContent = "";
+    const startedAt =
+      typeof performance !== "undefined" && performance.now
+        ? performance.now()
+        : Date.now();
+    try {
+      console.debug("Orbitar refine -> sending", {
+        textLength: (text || "").length,
+        modelStyle: modelSelect.value,
+        templateId: templateSelect.value,
+        category: categorySelect.value,
+      });
+    } catch (_e) {}
 
-    chrome.runtime.sendMessage(
+    sendMessageSafe(
       {
         type: "REFINE_TEXT",
         text: text,
@@ -411,20 +509,45 @@ function showToolbar() {
         refineBtn.textContent = "Refine";
 
         if (chrome.runtime.lastError) {
+          try {
+            console.error(
+              "Orbitar refine -> runtime error",
+              chrome.runtime.lastError
+            );
+          } catch (_e) {}
           errorMsg.textContent =
             "Orbitar: backend unreachable. Is dev server running?";
           return;
         }
         if (!response) {
+          try {
+            console.error("Orbitar refine -> empty response");
+          } catch (_e) {}
           errorMsg.textContent = "Unexpected error.";
           return;
         }
         if (response.error) {
+          try {
+            console.error("Orbitar refine -> background error", response);
+            if (response._debug) {
+              console.debug("Orbitar refine -> debug", response._debug);
+            }
+          } catch (_e) {}
           errorMsg.textContent = response.error;
           return;
         }
 
         // Success! Replace text
+        try {
+          const endedAt =
+            typeof performance !== "undefined" && performance.now
+              ? performance.now()
+              : Date.now();
+          console.debug("Orbitar refine -> success", {
+            durationMs: endedAt - startedAt,
+            refinedTextLength: (response.refinedText || "").length,
+          });
+        } catch (_e) {}
         replaceTextInActiveElement(response.refinedText);
         removeToolbar();
       }
@@ -449,22 +572,42 @@ function positionToolbar(target) {
   const scrollX = window.scrollX || window.pageXOffset || 0;
   const scrollY = window.scrollY || window.pageYOffset || 0;
 
-  // Position ABOVE the input
-  // "Extend up dynamically"
-  // We need to know the toolbar's height, but it's in Shadow DOM.
-  // We can estimate or measure.
-  const toolbarHeight = 46; // Approx
-  const padding = 8;
+  // Set width to match input (within sensible bounds)
+  const minWidth = 360;
+  const maxWidth = 720;
+  const desiredWidth = Math.max(
+    minWidth,
+    Math.min(maxWidth, Math.floor(rect.width))
+  );
+  toolbarHost.style.width = `${desiredWidth}px`;
 
-  const top = rect.top + scrollY - toolbarHeight - padding;
-  const left = rect.left + scrollX;
+  // After width set, measure the host height (includes shadow content)
+  const hostHeight = toolbarHost.offsetHeight || 60;
+  const padding = 10;
+
+  // Align left with input, adjust if panel wider than input
+  let left = rect.left + scrollX;
+  if (desiredWidth > rect.width) {
+    // Keep left edge aligned but never overflow right viewport
+    const viewportRight =
+      scrollX + (window.innerWidth || document.documentElement.clientWidth);
+    const right = left + desiredWidth;
+    if (right > viewportRight - 10) {
+      left = Math.max(10 + scrollX, viewportRight - desiredWidth - 10);
+    }
+  }
+
+  // Position ABOVE the input
+  let top = rect.top + scrollY - hostHeight - padding;
 
   // Ensure it doesn't go off-screen top
-  const finalTop = Math.max(top, scrollY + 10);
+  const minTop = scrollY + 10;
+  if (top < minTop) {
+    top = minTop;
+  }
 
-  toolbarHost.style.top = `${finalTop}px`;
+  toolbarHost.style.top = `${top}px`;
   toolbarHost.style.left = `${left}px`;
-  // Ensure it sits above everything
   toolbarHost.style.zIndex = "2147483647";
 }
 

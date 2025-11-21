@@ -282,16 +282,209 @@ ${getTemplateGuidance(templateId)}
 const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
 
 /**
+ * Lightweight heuristic classifier to improve suggestions without a model call.
+ * Returns a non-general TemplateId when clear cues are present, else null.
+ */
+function heuristicTemplate(
+  text: string
+): {
+  templateId: TemplateId;
+  category: TemplateCategory;
+  confidence: number;
+} | null {
+  const t = text.toLowerCase();
+
+  const has = (...keys: string[]) => keys.some((k) => t.includes(k));
+
+  // Coding
+  if (
+    has("unit test", "jest", "vitest", "test suite", "write tests", "coverage")
+  ) {
+    return { templateId: "coding_tests", category: "coding", confidence: 0.85 };
+  }
+  if (has("bug", "fix", "stack trace", "exception", "error message", "debug")) {
+    return { templateId: "coding_debug", category: "coding", confidence: 0.85 };
+  }
+  if (
+    has("refactor", "optimize", "improve readability", "cleanup", "performance")
+  ) {
+    return {
+      templateId: "coding_refactor",
+      category: "coding",
+      confidence: 0.8,
+    };
+  }
+  if (
+    has("implement", "build", "add feature", "create component", "scaffold")
+  ) {
+    return {
+      templateId: "coding_feature",
+      category: "coding",
+      confidence: 0.75,
+    };
+  }
+  if (has("explain code", "what does this code", "explain this function")) {
+    return {
+      templateId: "coding_explain",
+      category: "coding",
+      confidence: 0.75,
+    };
+  }
+
+  // Writing
+  if (has("blog post", "write a post", "article", "outline", "long-form")) {
+    return { templateId: "writing_blog", category: "writing", confidence: 0.8 };
+  }
+  if (has("twitter thread", "x thread", "tweetstorm")) {
+    return {
+      templateId: "writing_twitter_thread",
+      category: "writing",
+      confidence: 0.8,
+    };
+  }
+  if (has("linkedin post", "linkein post", "professional post")) {
+    return {
+      templateId: "writing_linkedin_post",
+      category: "writing",
+      confidence: 0.75,
+    };
+  }
+  if (has("draft email", "write an email", "cold email", "follow-up email")) {
+    return {
+      templateId: "writing_email",
+      category: "writing",
+      confidence: 0.85,
+    };
+  }
+  if (
+    has(
+      "landing page",
+      "homepage copy",
+      "hero section",
+      "cta",
+      "call to action"
+    )
+  ) {
+    return {
+      templateId: "writing_landing_page",
+      category: "writing",
+      confidence: 0.8,
+    };
+  }
+
+  // Research
+  if (has("summarize", "tl;dr", "summary", "distill")) {
+    return {
+      templateId: "research_summarize",
+      category: "research",
+      confidence: 0.85,
+    };
+  }
+  if (has("compare", "versus", "vs.", "pros and cons", "trade-offs")) {
+    return {
+      templateId: "research_compare",
+      category: "research",
+      confidence: 0.8,
+    };
+  }
+  if (has("extract key points", "key points", "highlights", "bullet points")) {
+    return {
+      templateId: "research_extract_points",
+      category: "research",
+      confidence: 0.8,
+    };
+  }
+
+  // Planning
+  if (has("roadmap", "milestones", "timeline", "plan phases")) {
+    return {
+      templateId: "planning_roadmap",
+      category: "planning",
+      confidence: 0.75,
+    };
+  }
+  if (
+    has("feature spec", "specification", "acceptance criteria", "requirements")
+  ) {
+    return {
+      templateId: "planning_feature_spec",
+      category: "planning",
+      confidence: 0.8,
+    };
+  }
+  if (has("meeting notes", "action items", "owners", "follow-ups", "minutes")) {
+    return {
+      templateId: "planning_meeting_notes",
+      category: "planning",
+      confidence: 0.8,
+    };
+  }
+
+  // Communication
+  if (has("reply", "respond", "response", "answer back")) {
+    return {
+      templateId: "communication_reply",
+      category: "communication",
+      confidence: 0.7,
+    };
+  }
+  if (
+    has(
+      "adjust tone",
+      "more formal",
+      "more polite",
+      "friendlier",
+      "rewrite in a formal tone"
+    )
+  ) {
+    return {
+      templateId: "communication_tone_adjust",
+      category: "communication",
+      confidence: 0.75,
+    };
+  }
+
+  // Creative
+  if (has("story", "scene", "character", "plot", "narrative")) {
+    return {
+      templateId: "creative_story",
+      category: "creative",
+      confidence: 0.75,
+    };
+  }
+  if (has("brainstorm", "ideas", "ideate", "suggest ideas")) {
+    return {
+      templateId: "creative_brainstorm",
+      category: "creative",
+      confidence: 0.75,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Classify free-form text into a TemplateId + category.
  * Returns general_general on failure, with confidence clamped to [0,1].
  */
-export async function classifyTemplate(
-  text: string
-): Promise<{
+export async function classifyTemplate(text: string): Promise<{
   templateId: TemplateId;
   category: TemplateCategory;
   confidence: number;
 }> {
+  // 1) Try fast heuristic first
+  const h = heuristicTemplate(text);
+  if (h) return h;
+
+  // 2) If no OpenAI key, fall back to general (or heuristic already returned)
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      templateId: "general_general",
+      category: "general",
+      confidence: 0.5,
+    };
+  }
+
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const ids = Object.keys(templateRegistry) as TemplateId[];
   const idList = ids.join(", ");
@@ -334,10 +527,17 @@ You MUST respond with exactly one JSON object, no prose:
         confidence = Math.max(0, Math.min(1, parsed.confidence));
       }
     }
+    // If model returns low-confidence general, try heuristic again (conservative)
+    if (templateId === "general_general" && confidence < 0.6) {
+      const hh = heuristicTemplate(text);
+      if (hh) return hh;
+    }
     const category = templateRegistry[templateId].category;
     return { templateId, category, confidence };
   } catch (err) {
-    // Fallback
+    // Fallback to heuristic or general
+    const hh = heuristicTemplate(text);
+    if (hh) return hh;
     return {
       templateId: "general_general",
       category: "general",

@@ -30,7 +30,6 @@ function jsonCors(body: any, status = 200) {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
       "Access-Control-Max-Age": "86400",
       Vary: "Origin",
     },
@@ -43,7 +42,6 @@ export function OPTIONS() {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
       "Access-Control-Max-Age": "86400",
     },
   });
