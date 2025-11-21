@@ -52,8 +52,9 @@ export async function revokeApiKey(keyId: string) {
     throw new Error("Unauthorized")
   }
 
-  await prisma.apiKey.delete({
-    where: { id: keyId }
+  await prisma.apiKey.update({
+    where: { id: keyId },
+    data: { revoked: true }
   })
 
   revalidatePath('/dashboard')

@@ -22,7 +22,10 @@ export async function POST(req: NextRequest) {
 
   // 1. Validate Token
   const apiKey = await prisma.apiKey.findFirst({
-    where: { key: token },
+    where: { 
+      key: token,
+      revoked: false
+    },
     include: { user: true }
   })
 
