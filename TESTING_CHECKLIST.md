@@ -31,10 +31,12 @@ Follow these steps to verify the entire system is working correctly.
 - [ ] **Toolbar**: Click the icon.
   - [ ] **Verify**: The new **ChatGPT-style toolbar** should slide up _above_ the input.
   - [ ] **Verify**: It should have a dark theme, green "Refine" button, and pill shape.
+  - [ ] **Plan Badge**: Verify you see your plan name (e.g., "Pro" or "Free") on the left, instead of a model selector.
+  - [ ] **Suggestion**: If you typed a recognizable prompt (e.g., "Write a react component"), verify a suggestion chip appears _above_ the category dropdown.
 
 ## 5. Testing Functionality
 
-- [ ] **Refine**: Select a style (e.g., "GPT-5") and template (e.g., "General"), then click "Refine".
+- [ ] **Refine**: Select a category/template (or use the suggestion), then click "Refine".
 - [ ] **Wait**: The button should show "Refining...".
 - [ ] **Result**: The text in the input field should be replaced with the refined version.
 

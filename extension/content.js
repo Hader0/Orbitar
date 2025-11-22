@@ -5,6 +5,11 @@ let orbitarIcon = null;
 let toolbarHost = null;
 let toolbarRoot = null;
 
+// Integrated ChatGPT mode state
+let integratedComposer = null; // the ChatGPT composer container
+let integratedPanelEl = null; // the top panel shown when Dyson icon clicked
+let integratedIconEl = null; // the Dyson icon injected into the composer
+
 /**
  * Safe messaging to background with retry to handle transient "Extension context invalidated"
  * errors when the service worker reloads. Retries a couple of times with small delay.
@@ -51,6 +56,15 @@ const ORBITAR_TEMPLATE_GROUPS = {
     { value: "coding_refactor", label: "Refactor / improve" },
     { value: "coding_tests", label: "Write tests" },
     { value: "coding_explain", label: "Explain code" },
+    { value: "coding_review", label: "Code review" },
+    { value: "coding_optimize", label: "Optimize performance" },
+    { value: "coding_documentation", label: "Write documentation" },
+    { value: "coding_api", label: "Design API" },
+    { value: "coding_database", label: "Database schema" },
+    { value: "coding_architecture", label: "System architecture" },
+    { value: "coding_security", label: "Security review" },
+    { value: "coding_migration", label: "Code migration" },
+    { value: "coding_website", label: "Build website" },
   ],
   writing: [
     { value: "writing_blog", label: "Blog post" },
@@ -58,24 +72,43 @@ const ORBITAR_TEMPLATE_GROUPS = {
     { value: "writing_linkedin_post", label: "LinkedIn post" },
     { value: "writing_email", label: "Email" },
     { value: "writing_landing_page", label: "Landing page copy" },
+    { value: "writing_newsletter", label: "Newsletter" },
+    { value: "writing_doc", label: "Documentation" },
+    { value: "writing_press_release", label: "Press release" },
+    { value: "writing_product_desc", label: "Product description" },
   ],
   research: [
     { value: "research_summarize", label: "Summarize" },
     { value: "research_compare", label: "Compare options" },
     { value: "research_extract_points", label: "Extract key points" },
+    { value: "research_analysis", label: "Market analysis" },
+    { value: "research_trends", label: "Trend analysis" },
+    { value: "research_competitive", label: "Competitive research" },
   ],
   planning: [
     { value: "planning_roadmap", label: "Roadmap / plan" },
     { value: "planning_feature_spec", label: "Feature spec" },
     { value: "planning_meeting_notes", label: "Meeting notes" },
+    { value: "planning_project", label: "Project plan" },
+    { value: "planning_strategy", label: "Strategy document" },
+    { value: "planning_timeline", label: "Timeline / milestones" },
   ],
   communication: [
     { value: "communication_reply", label: "Reply" },
     { value: "communication_tone_adjust", label: "Adjust tone" },
+    { value: "communication_translate", label: "Translate" },
+    { value: "communication_simplify", label: "Simplify language" },
+    { value: "communication_professional", label: "Make professional" },
   ],
   creative: [
     { value: "creative_story", label: "Story / scene" },
     { value: "creative_brainstorm", label: "Brainstorm ideas" },
+    { value: "creative_slogan", label: "Slogan / tagline" },
+    { value: "creative_poem", label: "Poem / verse" },
+    { value: "creative_script", label: "Script / dialogue" },
+    { value: "creative_naming", label: "Name ideas" },
+    { value: "creative_worldbuilding", label: "Worldbuilding" },
+    { value: "creative_character", label: "Character development" },
   ],
   general: [{ value: "general_general", label: "General prompt" }],
 };
@@ -97,29 +130,576 @@ function isEditable(el) {
   return false;
 }
 
+/**
+ * Detect if we are on ChatGPT's chat product where we should integrate
+ * directly into the composer (not overlay).
+ */
+function isChatGPTPage() {
+  const host = location.hostname;
+  return (
+    /(^|\.)chatgpt\.com$/i.test(host) || /(^|\.)openai\.com$/i.test(host) // chat.openai.com
+  );
+}
+
+/**
+ * Find a robust composer container starting from the focused editable target.
+ * We use heuristics that work across ChatGPT UI revisions.
+ */
+function findComposerContainerFrom(target) {
+  let el = target;
+  for (let i = 0; i < 8 && el && el !== document.body; i++) {
+    try {
+      const cs = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      const hasEditable =
+        el.querySelector?.("textarea, [contenteditable='true']") != null ||
+        el === target;
+      const isBlocky =
+        cs.display === "block" ||
+        cs.display === "flex" ||
+        cs.display === "grid" ||
+        cs.display === "flow-root";
+      if (hasEditable && isBlocky && rect.width > 300 && rect.height > 40) {
+        return el;
+      }
+    } catch (_e) {}
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Ensure a Dyson sphere icon is injected into the ChatGPT composer.
+ * It appears integrated with the UI, without using a viewport overlay.
+ */
+/**
+ * Ensure a Dyson sphere icon is injected into ChatGPT's button controls area.
+ */
+function ensureIntegratedIcon(composer) {
+  if (integratedIconEl && integratedIconEl.isConnected) return;
+
+  const createDysonButton = () => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "orbitar-chatgpt-icon composer-btn";
+    btn.title = "Orbitar – Refine prompt";
+    btn.ariaLabel = "Open Orbitar";
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (integratedPanelEl) {
+        removeIntegratedPanel();
+      } else {
+        showIntegratedPanel();
+      }
+    });
+
+    // Inner glow
+    const glow = document.createElement("div");
+    glow.className = "orbitar-icon-glow";
+    btn.appendChild(glow);
+
+    // SVG
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    
+    // SVG Content (Dyson Sphere circles)
+    svg.innerHTML = `
+      <circle cx="12" cy="12" r="2" fill="currentColor" class="group-hover:opacity-100 transition-opacity"></circle>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" opacity="0.8" class="group-hover:opacity-100 transition-opacity"></circle>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" opacity="0.5" transform="rotate(60 12 12)" class="group-hover:opacity-70 transition-opacity"></circle>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" opacity="0.5" transform="rotate(120 12 12)" class="group-hover:opacity-70 transition-opacity"></circle>
+      <ellipse cx="12" cy="12" rx="9" ry="4" stroke="currentColor" stroke-width="1" opacity="0.6" class="group-hover:opacity-80 transition-opacity"></ellipse>
+      <ellipse cx="12" cy="12" rx="4" ry="9" stroke="currentColor" stroke-width="1" opacity="0.6" class="group-hover:opacity-80 transition-opacity"></ellipse>
+      <ellipse cx="12" cy="12" rx="8" ry="5" stroke="currentColor" stroke-width="0.8" opacity="0.4" transform="rotate(45 12 12)" class="group-hover:opacity-60 transition-opacity"></ellipse>
+      <ellipse cx="12" cy="12" rx="8" ry="5" stroke="currentColor" stroke-width="0.8" opacity="0.4" transform="rotate(-45 12 12)" class="group-hover:opacity-60 transition-opacity"></ellipse>
+    `;
+    
+    btn.appendChild(svg);
+    return btn;
+  };
+
+  // Find the form element which contains the composer grid
+  const form = composer.closest('form') || composer.querySelector('form');
+  if (!form) {
+    console.warn('[Orbitar] Could not find form element');
+    return;
+  }
+
+  // Strategy 1: Find [grid-area:trailing] container within the form
+  const trailingContainer = form.querySelector('[class*="grid-area:trailing"]') ||
+                           form.querySelector('div[class*="[grid-area:trailing]"]');
+  
+  if (trailingContainer) {
+    // Find the flex container inside trailing area
+    const flexContainer = trailingContainer.querySelector('.ms-auto.flex.items-center') ||
+                          trailingContainer.querySelector('div.flex.items-center');
+    
+    if (flexContainer) {
+      const btn = createDysonButton();
+      // Insert as first child of the flex container (before mic)
+      flexContainer.insertBefore(btn, flexContainer.firstChild);
+      integratedIconEl = btn;
+      console.log('[Orbitar] Icon placed in grid-area:trailing flex container');
+      return;
+    }
+  }
+
+  // Strategy 2: Find dictate/mic button within form and use its parent
+  const micBtn = form.querySelector('button[aria-label*="Dictate" i]') ||
+                 form.querySelector('button[aria-label*="microphone" i]') ||
+                 form.querySelector('button[aria-label*="voice" i]');
+  
+  if (micBtn && micBtn.parentElement) {
+    const btn = createDysonButton();
+    micBtn.parentElement.insertBefore(btn, micBtn);
+    integratedIconEl = btn;
+    console.log('[Orbitar] Icon placed before mic button');
+    return;
+  }
+
+  // Strategy 3: Find send button within form and use its parent
+  const sendBtn = form.querySelector('button[data-testid="send-button"]') ||
+                  form.querySelector('#composer-submit-button') ||
+                  form.querySelector('button[id*="submit"]');
+
+  if (sendBtn && sendBtn.parentElement) {
+    const btn = createDysonButton();
+    sendBtn.parentElement.insertBefore(btn, sendBtn);
+    integratedIconEl = btn;
+    console.log('[Orbitar] Icon placed before send button');
+    return;
+  }
+
+  console.warn('[Orbitar] Icon placement failed - no suitable container found');
+}
+
+/**
+ * Create an integrated panel at the form/composer level for full width.
+ * Based on ChatGPT's actual DOM structure.
+ */
+function showIntegratedPanel() {
+  if (!integratedComposer) return;
+  if (integratedPanelEl && integratedPanelEl.isConnected) return;
+
+  // Find the form or the grid container that spans full width
+  let panelContainer = null;
+  
+  // Strategy 1: Find the form element (immediate parent of grid)
+  const form = integratedComposer.closest('form') || 
+               integratedComposer.querySelector('form');
+  
+  if (form) {
+    // Find the grid container inside the form
+    const gridContainer = form.querySelector('div[class*="grid"]');
+    if (gridContainer) {
+      panelContainer = gridContainer.parentElement; // Insert before the grid
+    } else {
+      panelContainer = form;
+    }
+  }
+  
+  // Strategy 2: Walk up to find a wider container
+  if (!panelContainer) {
+    let current = integratedComposer;
+    for (let i = 0; i < 5 && current && current !== document.body; i++) {
+      try {
+        const rect = current.getBoundingClientRect();
+        const parentRect = current.parentElement?.getBoundingClientRect();
+        
+        if (parentRect && parentRect.width > rect.width + 40) {
+          panelContainer = current.parentElement;
+        }
+      } catch (_e) {}
+      current = current.parentElement;
+    }
+  }
+
+  // Fallback to integratedComposer
+  if (!panelContainer) {
+    panelContainer = integratedComposer;
+  }
+
+  const panel = document.createElement("div");
+  panel.className = "orbitar-panel";
+  panel.innerHTML = `
+    <div class="orbitar-chatgpt-bar" id="orbitar-bar">
+      <div class="orbitar-panel-glow"></div>
+      
+      <div class="orbitar-chatgpt-left">
+        <span class="orbitar-recommendation-text" id="orbitar-suggestion" style="display:none;"></span>
+
+        <div class="orbitar-labels-row">
+          <span class="orbitar-input-label">Category</span>
+          <span class="orbitar-input-label">Template</span>
+        </div>
+
+        <div class="orbitar-selectors-row">
+          <div class="orbitar-pill-wrap">
+            <div class="orbitar-pill orbitar-category-pill">
+               <span class="orbitar-pill-value" id="orbitar-category-value">General</span>
+               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="orbitar-pill-chevron"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <select class="orbitar-select-native" id="orbitar-category" title="Category"></select>
+          </div>
+
+          <div class="orbitar-pill-wrap">
+            <div class="orbitar-pill orbitar-template-pill">
+               <span class="orbitar-pill-value" id="orbitar-template-value">General prompt</span>
+               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="orbitar-pill-chevron"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <select class="orbitar-select-native" id="orbitar-template" title="Template"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="orbitar-chatgpt-right">
+        <div class="orbitar-plan-pill">
+          <span id="orbitar-plan-badge">Free</span>
+        </div>
+        <button class="orbitar-refine-button" id="refine-btn">
+           <div class="orbitar-refine-shine"></div>
+           <span style="position:relative; z-index:10;">Refine</span>
+        </button>
+      </div>
+    </div>
+
+    <span class="orbitar-error" id="error-msg"></span>
+  `;
+
+  // Insert at the top of the container (before everything else)
+  panelContainer.insertBefore(panel, panelContainer.firstChild);
+
+  // Wire up events
+  const refineBtn = panel.querySelector("#refine-btn");
+  const planBadge = panel.querySelector("#orbitar-plan-badge");
+  const categorySelect = panel.querySelector("#orbitar-category");
+  const templateSelect = panel.querySelector("#orbitar-template");
+  const suggestionSpan = panel.querySelector("#orbitar-suggestion");
+  const errorMsg = panel.querySelector("#error-msg");
+  const categoryValueEl = panel.querySelector("#orbitar-category-value");
+  const templateValueEl = panel.querySelector("#orbitar-template-value");
+
+  // Fetch User Plan
+  sendMessageSafe({ type: "GET_USER_PLAN" }, (resp) => {
+    if (resp && resp.plan) {
+      const planName = resp.plan.charAt(0).toUpperCase() + resp.plan.slice(1);
+      planBadge.textContent = planName;
+      planBadge.setAttribute('data-plan', resp.plan);
+    } else {
+      planBadge.textContent = "Free";
+      planBadge.setAttribute('data-plan', 'free');
+    }
+  });
+
+  // Category/template setup
+  function niceCategoryLabel(key) {
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+  function populateCategoryOptions() {
+    categorySelect.innerHTML = "";
+    Object.keys(ORBITAR_TEMPLATE_GROUPS).forEach((cat) => {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = niceCategoryLabel(cat);
+      categorySelect.appendChild(opt);
+    });
+  }
+  function populateTemplateOptions(cat) {
+    templateSelect.innerHTML = "";
+    const arr = ORBITAR_TEMPLATE_GROUPS[cat] || [];
+    arr.forEach((tpl) => {
+      const opt = document.createElement("option");
+      opt.value = tpl.value;
+      opt.textContent = tpl.label;
+      templateSelect.appendChild(opt);
+    });
+  }
+
+  let userChangedCategory = false;
+  let userChangedTemplate = false;
+
+  populateCategoryOptions();
+  categorySelect.value = ORBITAR_DEFAULT_CATEGORY;
+  populateTemplateOptions(ORBITAR_DEFAULT_CATEGORY);
+  templateSelect.value = ORBITAR_DEFAULT_TEMPLATE_ID;
+
+  // Initialize visible values in the pills
+  try {
+    categoryValueEl.textContent =
+      categorySelect.options[categorySelect.selectedIndex]?.textContent ||
+      ORBITAR_DEFAULT_CATEGORY;
+    templateValueEl.textContent =
+      templateSelect.options[templateSelect.selectedIndex]?.textContent ||
+      "General prompt";
+  } catch (_e) {}
+
+  categorySelect.addEventListener("change", () => {
+    userChangedCategory = true;
+    populateTemplateOptions(categorySelect.value);
+    // Update the visible value text for category and template
+    try {
+      categoryValueEl.textContent =
+        categorySelect.options[categorySelect.selectedIndex]?.textContent ||
+        categorySelect.value;
+      templateValueEl.textContent =
+        templateSelect.options[templateSelect.selectedIndex]?.textContent ||
+        templateSelect.value;
+    } catch (_e) {}
+    suggestionSpan.style.display = "none";
+  });
+  
+  // Prevent select clicks from bubbling and closing panel
+  categorySelect.addEventListener("mousedown", (e) => {
+    e.stopPropagation();
+  });
+  categorySelect.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+  
+  templateSelect.addEventListener("change", () => {
+    userChangedTemplate = true;
+    try {
+      templateValueEl.textContent =
+        templateSelect.options[templateSelect.selectedIndex]?.textContent ||
+        templateSelect.value;
+    } catch (_e) {}
+    suggestionSpan.style.display = "none";
+  });
+  
+  // Prevent select clicks from bubbling and closing panel
+  templateSelect.addEventListener("mousedown", (e) => {
+    e.stopPropagation();
+  });
+  templateSelect.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  // Function to update recommendations based on text
+  function updateRecommendations(text) {
+    if (!text || text.trim().length === 0 || userChangedCategory || userChangedTemplate) return;
+    
+    sendMessageSafe(
+      {
+        type: "CLASSIFY_TEXT",
+        text: text,
+      },
+      (resp) => {
+        if (!resp || resp.error) return;
+        if (userChangedCategory || userChangedTemplate) return;
+        const { templateId, category } = resp;
+        if (category && ORBITAR_TEMPLATE_GROUPS[category]) {
+          categorySelect.value = category;
+          populateTemplateOptions(category);
+          const group = ORBITAR_TEMPLATE_GROUPS[category];
+          if (group.some((g) => g.value === templateId)) {
+            templateSelect.value = templateId;
+            // Update visible value texts in pills to reflect suggestion
+            try {
+              categoryValueEl.textContent =
+                categorySelect.options[categorySelect.selectedIndex]
+                  ?.textContent || category;
+              templateValueEl.textContent =
+                templateSelect.options[templateSelect.selectedIndex]
+                  ?.textContent || templateId;
+            } catch (_e) {}
+            // Recommendation text with "Recommended: " prefix
+            suggestionSpan.textContent = `Recommended: ${niceCategoryLabel(category)} → ${
+              group.find((g) => g.value === templateId)?.label || templateId
+            }`;
+            suggestionSpan.style.display = "inline-block";
+          }
+        }
+      }
+    );
+  }
+
+  // Suggest category/template from current text
+  const initialText = getCurrentText();
+  if (initialText && initialText.trim().length > 0) {
+    updateRecommendations(initialText);
+  }
+
+  // Real-time text monitoring with debounce
+  let textCheckTimeout;
+  let lastCheckedText = initialText || "";
+  
+  const textMonitorInterval = setInterval(() => {
+    if (!integratedPanelEl) {
+      clearInterval(textMonitorInterval);
+      return;
+    }
+    
+    const currentText = getCurrentText();
+    if (currentText !== lastCheckedText) {
+      lastCheckedText = currentText;
+      
+      // Clear existing timeout
+      if (textCheckTimeout) clearTimeout(textCheckTimeout);
+      
+      // Set new timeout for 1 second
+      textCheckTimeout = setTimeout(() => {
+        updateRecommendations(currentText);
+      }, 1000);
+    }
+  }, 250); // Check every 250ms
+
+  refineBtn.addEventListener("click", () => {
+    const text = getCurrentText();
+    if (!text) {
+      errorMsg.textContent = "No text";
+      return;
+    }
+    refineBtn.disabled = true;
+    refineBtn.textContent = "...";
+    errorMsg.textContent = "";
+
+    sendMessageSafe(
+      {
+        type: "REFINE_TEXT",
+        text,
+        templateId: templateSelect.value,
+        category: categorySelect.value,
+      },
+      (response) => {
+        refineBtn.disabled = false;
+        refineBtn.textContent = "Refine";
+        if (!response || response.error || chrome.runtime.lastError) {
+          errorMsg.textContent =
+            response?.error ||
+            "Orbitar: backend unreachable. Is dev server running?";
+          return;
+        }
+        replaceTextInActiveElement(response.refinedText);
+        removeIntegratedPanel();
+      }
+    );
+  });
+
+  integratedPanelEl = panel;
+}
+
+/** Remove the integrated panel only (keep icon) */
+function removeIntegratedPanel() {
+  if (integratedPanelEl) {
+    integratedPanelEl.remove();
+    integratedPanelEl = null;
+  }
+}
+
+/**
+ * Resilience helpers for ChatGPT integration:
+ * - Debounced MutationObserver to re-attach after SPA route changes/renders
+ * - Initial attach without requiring focus so icon is present at rest
+ */
+function debounce(fn, wait = 200) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+function tryAttachToChatGPT() {
+  if (!isChatGPTPage()) return;
+  // Try to find a composer even without focus
+  const candidate =
+    document.querySelector("main textarea") ||
+    document.querySelector("textarea[placeholder]") ||
+    document.querySelector('[contenteditable="true"][role="textbox"]') ||
+    document.querySelector("div[contenteditable='true']");
+  const comp = candidate ? findComposerContainerFrom(candidate) : null;
+  if (comp) {
+    integratedComposer = comp;
+    ensureIntegratedIcon(comp);
+  }
+}
+
+function initChatGPTIntegration() {
+  tryAttachToChatGPT();
+  const observer = new MutationObserver(
+    debounce(() => {
+      tryAttachToChatGPT();
+    }, 150)
+  );
+  observer.observe(document.documentElement || document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  // Re-run on navigation and visibility changes
+  window.addEventListener("pageshow", tryAttachToChatGPT);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") tryAttachToChatGPT();
+  });
+
+  // If focus moves to an editable, ensure icon exists
+  document.addEventListener("focusin", (e) => {
+    const t = e.target;
+    if (isEditable(t)) {
+      const comp = findComposerContainerFrom(t);
+      if (comp) {
+        integratedComposer = comp;
+        ensureIntegratedIcon(comp);
+      }
+    }
+  });
+}
+
+// Initialize when ready on ChatGPT pages
+if (isChatGPTPage()) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () =>
+      initChatGPTIntegration()
+    );
+  } else {
+    initChatGPTIntegration();
+  }
+}
+
 // --- Focus detection & Icon Management ---
 
 document.addEventListener("focusin", (e) => {
   const target = e.target;
+
   if (isEditable(target)) {
     activeElement = target;
+
+    // If on ChatGPT, integrate into the composer
+    if (isChatGPTPage()) {
+      integratedComposer = findComposerContainerFrom(target);
+      if (integratedComposer) {
+        ensureIntegratedIcon(integratedComposer);
+        // Do NOT show overlay icon in ChatGPT integrated mode
+        hideIcon();
+        return;
+      }
+    }
+
+    // Fallback to overlay icon for non-ChatGPT pages
     showIcon(target);
   } else {
-    // Delay hiding to allow clicking the icon
+    // Delay hiding to allow clicking the icon or the integrated panel
     setTimeout(() => {
-      if (
-        document.activeElement !== target &&
-        !toolbarHost?.contains(document.activeElement)
-      ) {
+      const focused = document.activeElement;
+      const stillInIntegrated =
+        integratedComposer?.contains?.(focused) ||
+        integratedPanelEl?.contains?.(focused) ||
+        integratedIconEl?.contains?.(focused);
+      const stillInOverlay = toolbarHost?.contains?.(focused);
+
+      if (!stillInIntegrated && !stillInOverlay) {
         activeElement = null;
         hideIcon();
-        removeToolbar();
+        removeToolbar(); // also removes integrated panel
       }
     }, 200);
   }
 });
 
-// Reposition on scroll/resize
+// Reposition on scroll/resize for overlay mode
 window.addEventListener(
   "scroll",
   () => {
@@ -139,6 +719,12 @@ window.addEventListener("resize", () => {
 });
 
 function showIcon(target) {
+  // If we are integrating into ChatGPT, do not create/position a floating icon
+  if (isChatGPTPage() && integratedComposer) {
+    ensureIntegratedIcon(integratedComposer);
+    return;
+  }
+
   if (!orbitarIcon) {
     orbitarIcon = document.createElement("div");
     orbitarIcon.className = "orbitar-icon";
@@ -178,7 +764,6 @@ function positionIcon(target) {
   const size = 24;
   const offset = 8;
 
-  // Check if there's space on the right, otherwise float over
   const top = rect.top + scrollY + offset;
   const left = rect.right + scrollX - size - offset - 5; // 5px padding from right edge
 
@@ -187,9 +772,20 @@ function positionIcon(target) {
   orbitarIcon.style.left = `${left}px`;
 }
 
-// --- Toolbar Logic ---
+// --- Toolbar Logic (overlay fallback) ---
 
 function toggleToolbar() {
+  // In ChatGPT integrated mode, toggle the integrated panel
+  if (isChatGPTPage() && integratedComposer) {
+    if (integratedPanelEl) {
+      removeIntegratedPanel();
+    } else {
+      showIntegratedPanel();
+    }
+    return;
+  }
+
+  // Fallback to overlay toolbar for other sites
   if (toolbarHost) {
     removeToolbar();
   } else {
@@ -227,6 +823,7 @@ function showToolbar() {
         color: #ececf1;
         animation: slideUp 0.15s ease-out;
         backdrop-filter: blur(8px);
+        position: relative; /* For absolute positioning of suggestion */
       }
       @keyframes slideUp {
         from { opacity: 0; transform: translateY(5px); }
@@ -263,6 +860,22 @@ function showToolbar() {
         border-radius: 9999px;
         padding: 2px 8px;
         font-size: 11px;
+      }
+      /* Suggestion chip positioning */
+      #orbitar-suggestion {
+        position: absolute;
+        top: -24px;
+        left: 100px;
+        background: rgba(32, 33, 35, 0.9);
+        border: 1px solid #444;
+        color: #d1d5db;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        white-space: nowrap;
+        z-index: 10;
+        pointer-events: none;
+        display: none;
       }
       button.primary {
         background: #10a37f; /* ChatGPT Green */
@@ -302,20 +915,23 @@ function showToolbar() {
         font-size: 11px;
         margin-left: 4px;
       }
+      #orbitar-plan-badge {
+        font-size: 12px;
+        color: #9ca3af;
+        padding: 0 4px;
+        text-transform: capitalize;
+      }
     </style>
     
-    <select id="model" title="Model Style">
-      <option value="gpt-mini">GPT-mini</option>
-      <option value="gpt-5">GPT-5</option>
-      <option value="claude">Claude</option>
-      <option value="gemini">Gemini</option>
-    </select>
+    <div id="orbitar-plan-badge">Loading...</div>
     
     <div class="divider"></div>
 
-    <select class="orbitar-inline-select" id="orbitar-category" title="Category"></select>
+    <div style="position: relative;">
+        <select class="orbitar-inline-select" id="orbitar-category" title="Category"></select>
+        <span id="orbitar-suggestion"></span>
+    </div>
     <select class="orbitar-inline-select" id="orbitar-template" title="Template"></select>
-    <span class="orbitar-inline-pill" id="orbitar-suggestion" style="display:none;"></span>
     
     <button class="primary" id="refine-btn">Refine</button>
     <button class="close" id="close-btn">&times;</button>
@@ -358,9 +974,17 @@ function showToolbar() {
       button.primary:hover {
         background: #0e8d6d !important;
       }
-      .orbitar-inline-pill {
+      #orbitar-plan-badge {
+        color: #8e8ea0 !important;
+        font-weight: 500 !important;
+      }
+      #orbitar-suggestion {
+        top: -28px !important;
+        left: 0 !important;
         background: #2a2b32 !important;
-        border-color: #3a3b45 !important;
+        border: 1px solid #3a3b45 !important;
+        color: #a1a1aa !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
       }
     `;
     container.appendChild(override);
@@ -374,11 +998,21 @@ function showToolbar() {
   // Event Listeners
   const refineBtn = container.querySelector("#refine-btn");
   const closeBtn = container.querySelector("#close-btn");
-  const modelSelect = container.querySelector("#model");
+  const planBadge = container.querySelector("#orbitar-plan-badge");
   const categorySelect = container.querySelector("#orbitar-category");
   const templateSelect = container.querySelector("#orbitar-template");
   const suggestionSpan = container.querySelector("#orbitar-suggestion");
   const errorMsg = container.querySelector("#error-msg");
+
+  // Fetch User Plan
+  sendMessageSafe({ type: "GET_USER_PLAN" }, (resp) => {
+    if (resp && resp.plan) {
+      planBadge.textContent =
+        resp.plan.charAt(0).toUpperCase() + resp.plan.slice(1);
+    } else {
+      planBadge.textContent = "Free"; // Fallback
+    }
+  });
 
   // Prevent focus loss but allow interaction with form controls (selects, buttons, inputs)
   container.addEventListener("mousedown", (e) => {
@@ -466,7 +1100,7 @@ function showToolbar() {
             )} → ${
               group.find((g) => g.value === templateId)?.label || templateId
             }`;
-            suggestionSpan.style.display = "inline";
+            suggestionSpan.style.display = "block"; // Block for absolute positioning
           }
         }
       }
@@ -483,14 +1117,9 @@ function showToolbar() {
     refineBtn.disabled = true;
     refineBtn.textContent = "...";
     errorMsg.textContent = "";
-    const startedAt =
-      typeof performance !== "undefined" && performance.now
-        ? performance.now()
-        : Date.now();
     try {
       console.debug("Orbitar refine -> sending", {
         textLength: (text || "").length,
-        modelStyle: modelSelect.value,
         templateId: templateSelect.value,
         category: categorySelect.value,
       });
@@ -500,7 +1129,6 @@ function showToolbar() {
       {
         type: "REFINE_TEXT",
         text: text,
-        modelStyle: modelSelect.value,
         templateId: templateSelect.value,
         category: categorySelect.value,
       },
@@ -538,16 +1166,6 @@ function showToolbar() {
         }
 
         // Success! Replace text
-        try {
-          const endedAt =
-            typeof performance !== "undefined" && performance.now
-              ? performance.now()
-              : Date.now();
-          console.debug("Orbitar refine -> success", {
-            durationMs: endedAt - startedAt,
-            refinedTextLength: (response.refinedText || "").length,
-          });
-        } catch (_e) {}
         replaceTextInActiveElement(response.refinedText);
         removeToolbar();
       }
@@ -558,10 +1176,16 @@ function showToolbar() {
 }
 
 function removeToolbar() {
+  // Remove overlay toolbar if present
   if (toolbarHost) {
     toolbarHost.remove();
     toolbarHost = null;
     toolbarRoot = null;
+  }
+  // Remove integrated panel if present
+  if (integratedPanelEl) {
+    integratedPanelEl.remove();
+    integratedPanelEl = null;
   }
 }
 
@@ -614,57 +1238,93 @@ function positionToolbar(target) {
 // --- Text Manipulation ---
 
 function getCurrentText() {
-  if (!activeElement) return "";
-
-  if (
-    activeElement.tagName === "TEXTAREA" ||
-    activeElement.tagName === "INPUT"
-  ) {
-    const start = activeElement.selectionStart;
-    const end = activeElement.selectionEnd;
-    if (start !== end) {
-      return activeElement.value.substring(start, end);
+  // Primary: currently focused editable element
+  if (activeElement) {
+    if (
+      activeElement.tagName === "TEXTAREA" ||
+      activeElement.tagName === "INPUT"
+    ) {
+      const start = activeElement.selectionStart;
+      const end = activeElement.selectionEnd;
+      if (start !== end) {
+        return activeElement.value.substring(start, end);
+      }
+      return activeElement.value;
     }
-    return activeElement.value;
+
+    if (activeElement.isContentEditable) {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) {
+        return sel.toString();
+      }
+      return activeElement.innerText;
+    }
   }
 
-  if (activeElement.isContentEditable) {
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed) {
-      return sel.toString();
-    }
-    return activeElement.innerText;
+  // Fallback: look inside the integrated ChatGPT composer if present
+  if (integratedComposer) {
+    const ta = integratedComposer.querySelector("textarea");
+    if (ta) return ta.value || "";
+    const ce =
+      integratedComposer.querySelector(
+        '[contenteditable="true"][role="textbox"]'
+      ) || integratedComposer.querySelector("div[contenteditable='true']");
+    if (ce) return ce.innerText || "";
   }
 
   return "";
 }
 
 function replaceTextInActiveElement(newText) {
-  if (!activeElement) return;
+  // Determine the best target element to write into
+  let el = activeElement;
 
-  const el = activeElement;
+  // Fallback to an element inside the integrated composer if nothing focused
+  if (!el && integratedComposer) {
+    el =
+      integratedComposer.querySelector("textarea") ||
+      integratedComposer.querySelector(
+        '[contenteditable="true"][role="textbox"]'
+      ) ||
+      integratedComposer.querySelector("div[contenteditable='true']");
+    if (el) {
+      try {
+        el.focus();
+      } catch (_e) {}
+      activeElement = el;
+    }
+  }
+
+  if (!el) return;
 
   // Input/Textarea
   if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
     const start = el.selectionStart;
     const end = el.selectionEnd;
 
-    // If there was a selection, replace just that
     if (start !== end) {
       const val = el.value;
       el.value = val.substring(0, start) + newText + val.substring(end);
     } else {
-      // Otherwise replace all (or insert at cursor? User said "replaces the text in the same field")
-      // Assuming replace ALL if no selection, or replace selection if exists.
-      // But if no selection, "replace text" usually means the whole thing for a "refine" action.
       el.value = newText;
     }
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }
   // ContentEditable
   else if (el.isContentEditable) {
-    // Simple replacement for now
+    try {
+      el.focus();
+    } catch (_e) {}
     el.innerText = newText;
+    try {
+      el.dispatchEvent(
+        new InputEvent("input", { bubbles: true, composed: true })
+      );
+      el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    } catch (_e) {
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
   }
 }
 

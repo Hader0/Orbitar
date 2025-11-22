@@ -17,8 +17,57 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "CLASSIFY_TEXT") {
     handleClassifyRequest(request, sendResponse);
     return true;
+  } else if (request.type === "GET_USER_PLAN") {
+    handleGetUserPlan(request, sendResponse);
+    return true;
   }
 });
+
+async function handleGetUserPlan(request, sendResponse) {
+  try {
+    const { orbitarToken } = await chrome.storage.sync.get(["orbitarToken"]);
+    if (!orbitarToken) {
+      sendResponse({ error: "No token" });
+      return;
+    }
+
+    let resp;
+    
+    // Try primary, then fallbacks
+    const endpoints = [
+      `${API_BASE_URL}/api/user/me`,
+      `${API_BASE_URL_FALLBACK}/api/user/me`,
+      `${API_BASE_URL_ALT}/api/user/me`,
+      `${API_BASE_URL_ALT_FALLBACK}/api/user/me`
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        resp = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${orbitarToken}`
+          }
+        });
+        if (resp) break;
+      } catch (e) {
+        // continue to next
+      }
+    }
+
+    if (!resp || !resp.ok) {
+      sendResponse({ error: "Failed to fetch plan" });
+      return;
+    }
+
+    const data = await resp.json();
+    sendResponse(data);
+  } catch (error) {
+    console.error("Orbitar get plan error:", error);
+    sendResponse({ error: "Failed to fetch plan" });
+  }
+}
 
 async function handleClassifyRequest(request, sendResponse) {
   try {
