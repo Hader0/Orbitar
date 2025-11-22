@@ -48,7 +48,24 @@ export async function GET(req: NextRequest) {
       return jsonCors({ error: "Invalid API key" }, 401);
     }
 
-    return jsonCors({ plan: apiKey.user.plan }, 200);
+    const PLAN_LIMITS: Record<string, number> = {
+      free: 10,
+      builder: 75,
+      pro: 500,
+    };
+
+    const limit = PLAN_LIMITS[apiKey.user.plan] || 10;
+    const now = new Date();
+    const resetTime = new Date(apiKey.user.dailyUsageResetAt);
+    
+    // Return usage count (reset if needed on client side)
+    const dailyUsageCount = now > resetTime ? 0 : apiKey.user.dailyUsageCount;
+
+    return jsonCors({ 
+      plan: apiKey.user.plan,
+      dailyUsageCount,
+      limit
+    }, 200);
   } catch (error) {
     console.error("User info error:", error);
     return jsonCors({ error: "Internal server error" }, 500);

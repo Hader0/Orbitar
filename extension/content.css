@@ -1,4 +1,4 @@
-/* content.css */
+clear/* content.css */
 
 /* Legacy floating icon (non-ChatGPT pages; overlay fallback) */
 .orbitar-icon {
@@ -223,23 +223,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   /* Border & Background */
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.03)
+  );
   backdrop-filter: blur(24px); /* backdrop-blur-xl */
-  
+
   /* Shadows */
-  box-shadow: 
-    0 4px 16px rgba(0, 0, 0, 0.3),
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3),
     inset 0 1px 2px rgba(255, 255, 255, 0.08);
-    
+
   /* Transitions */
   transition: all 300ms ease;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  
+
   /* Reset defaults */
   padding: 0;
   margin: 0;
@@ -247,8 +250,7 @@
 
 .orbitar-chatgpt-icon:hover {
   transform: scale(1.1);
-  box-shadow: 
-    0 8px 24px rgba(0, 0, 0, 0.4),
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
     inset 0 1px 3px rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.18);
 }
@@ -261,7 +263,12 @@
 .orbitar-icon-glow {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.05), transparent, transparent);
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0.05),
+    transparent,
+    transparent
+  );
   border-radius: 9999px;
   pointer-events: none;
   opacity: 0;
@@ -277,14 +284,17 @@
   width: 36px;
   height: 36px;
   color: rgba(255, 255, 255, 0.7);
-  transition: all 300ms ease;
+  transition: color 300ms ease, transform 300ms ease;
   position: relative;
   z-index: 10;
+  will-change: transform;
+  transform-origin: center center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .orbitar-chatgpt-icon:hover svg {
   color: #ffffff;
-  transform: rotate(12deg);
 }
 
 /* SVG inner circles transitions */
@@ -307,16 +317,16 @@
   }
 }
 
-.orbitar-chatgpt-icon:hover svg {
-  animation-duration: 10s;
-}
-
 /* 
    Fluid Panel Container
    Matches: w-full mb-2 px-4 py-3 rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.08] to-white/[0.03] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)_inset] relative overflow-hidden group
 */
 .orbitar-panel {
   position: relative;
+  /* allow recommendation popup to escape the panel without being clipped */
+  overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
 }
 
 .orbitar-chatgpt-bar {
@@ -324,36 +334,54 @@
   margin-bottom: 8px;
   padding: 12px 16px;
   border-radius: 16px;
-  
+
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.03)
+  );
   backdrop-filter: blur(40px); /* backdrop-blur-2xl */
-  
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
+
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
     inset 0 1px 2px rgba(255, 255, 255, 0.1);
-    
+
   position: relative;
-  overflow: hidden;
+  /* allow recommendation popup to escape the panel without being clipped */
+  overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  
+  padding-bottom: 8px; /* Further reduced from 12px to minimize spacing */
+
   /* Animation for opening */
   animation: orbitarSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes orbitarSlideDown {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Panel inner glow */
 .orbitar-panel-glow {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.03), transparent, transparent);
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0.03),
+    transparent,
+    transparent
+  );
   pointer-events: none;
   border-radius: 16px;
 }
@@ -366,21 +394,42 @@
   position: relative;
   z-index: 10;
   flex: 1;
+  justify-content: flex-end; /* Align content to bottom */
 }
 
-/* Recommendation text */
+/* Recommendation text
+   Positioned absolutely so showing/hiding it doesn't reflow the layout
+   and push the plan badge / refine button vertically.
+   Updated: LEFT-ALIGNED above panel with small gap below. */
 .orbitar-recommendation-text {
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: 10;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.96);
+  font-weight: 700;
   padding: 6px 12px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(34, 211, 238, 0.15));
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.26),
+    rgba(34, 211, 238, 0.16)
+  );
+  border: 1px solid rgba(99, 102, 241, 0.34);
+  border-radius: 10px;
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* keep suggestion readable but prevent it from being cut off by viewport */
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.16);
+  display: none;
+  margin-bottom: 6px; /* spacing above the bar */
+  margin-left: 4px;
   width: fit-content;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
-  margin-bottom: 4px;
 }
 
 .orbitar-recommendation-text:empty {
@@ -397,29 +446,38 @@
 
 /* 
    Plan Badge 
-   Matches: px-3 py-1 rounded-full bg-gradient-to-r from-[#4585FF] to-[#5B9FFF] text-white text-xs font-bold shadow-[0_2px_4px_rgba(69,133,255,0.3)]
+   New: Pro badge is a premium white pill with bold black text and a subtle dynamic glow.
 */
 .orbitar-plan-pill {
-  padding: 6px 14px;
+  padding: 4px 10px;
   border-radius: 9999px;
-  background: linear-gradient(to right, #4585FF, #5B9FFF);
+  background: linear-gradient(to right, #4585ff, #5b9fff);
   color: white;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   box-shadow: 0 2px 4px rgba(69, 133, 255, 0.3);
   width: fit-content;
   white-space: nowrap;
-  transition: all 200ms ease;
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
-/* Pro plan styling - white with black text */
+/* Pro plan styling - bright premium white with black bold text and subtle animation */
 .orbitar-plan-pill[data-plan="pro"],
 .orbitar-plan-pill[data-plan="Pro"] {
-  background: linear-gradient(135deg, #ffffff, #f5f5f5) !important;
-  color: #1a1a1a !important;
-  font-weight: 800;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.8) !important;
+  background: linear-gradient(90deg, #ffffff 0%, #f7f7f7 100%) !important;
+  color: #0b0b0b !important;
+  font-weight: 900;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
 }
+
+/* small dynamic affordance for pro badge - REMOVED hover effects */
+/* No hover effects needed */
+
+/* Shine animation for Pro badge - REMOVED */
+/* .orbitar-plan-pill[data-plan="pro"] { ... } */
+
 
 /* Labels Row */
 .orbitar-labels-row {
@@ -461,10 +519,13 @@
   padding: 8px 16px;
   border-radius: 9999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.04)
+  );
   backdrop-filter: blur(24px);
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.2),
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 1px rgba(255, 255, 255, 0.08);
   transition: all 200ms ease;
   cursor: pointer;
@@ -475,10 +536,13 @@
 }
 
 .orbitar-pill:hover {
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.08)
+  );
   border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.3),
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
     inset 0 1px 2px rgba(255, 255, 255, 0.12);
 }
 
@@ -563,95 +627,342 @@
 /* Right section: Refine + Close */
 .orbitar-chatgpt-right {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+/* Wrapper for refine button and usage text */
+.orbitar-refine-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+/* Usage count text below the Refine button */
+.orbitar-usage-text {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  white-space: nowrap;
+  position: absolute;
+  top: 100%;
+  margin-top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 /* 
    Refine Button
-   Matches: px-5 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 hover:from-indigo-600 hover:to-cyan-500 transition-all duration-300 shadow-[0_4px_16px_rgba(99,102,241,0.3),0_2px_8px_rgba(34,211,238,0.2)] hover:shadow-[0_6px_24px_rgba(99,102,241,0.4),0_4px_12px_rgba(34,211,238,0.3)] active:scale-[0.98] relative group overflow-hidden border border-white/20 hover:border-white/30
+   Restyled: No outer glow, rotating border.
 */
 .orbitar-refine-button {
-  padding: 8px 20px;
+  padding: 8px 22px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #ffffff, #e5e5e5);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #1a1a1a;
+  background: transparent; /* Background handled by pseudo-element */
+  border: none; /* Border handled by pseudo-element */
+  color: rgba(255, 255, 255, 0.95);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.15),
-    inset 0 1px 2px rgba(255, 255, 255, 0.8);
-  text-shadow: 0 0.5px 1px rgba(255, 255, 255, 0.5);
+  transition: transform 220ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+}
+
+/* Inner background */
+.orbitar-refine-button::after {
+  content: "";
+  position: absolute;
+  inset: 1px; /* Border width */
+  background: #ffffff; /* White bg for Dark Mode as requested */
+  border-radius: 9999px;
+  z-index: -1;
+}
+
+/* Rotating border */
+.orbitar-refine-button::before {
+  content: "";
+  position: absolute;
+  inset: -50%; /* Make it large enough to cover rotation */
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    #000000 20%, /* Black rotating border */
+    transparent 40%
+  );
+  animation: rotateBorder 3s linear infinite;
+  z-index: -2;
+  top: -50%;
+  left: -50%;
+}
+
+/* Text color for Dark Mode (since button is white) */
+.orbitar-refine-button {
+  color: #000000;
+}
+
+@keyframes rotateBorder {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Light mode overrides */
+html.light .orbitar-refine-button::after,
+body.light .orbitar-refine-button::after {
+  background: #ffffff;
+}
+
+html.light .orbitar-refine-button,
+body.light .orbitar-refine-button {
+  color: #000000;
+}
+
+html.light .orbitar-refine-button::before,
+body.light .orbitar-refine-button::before {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.8) 20%,
+    transparent 40%
+  );
 }
 
 .orbitar-refine-button:hover {
-  background: linear-gradient(135deg, #f5f5f5, #d4d4d4);
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.2),
-    inset 0 1px 2px rgba(255, 255, 255, 0.9);
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .orbitar-refine-button:active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: 
-    0 1px 4px rgba(0, 0, 0, 0.2),
-    inset 0 1px 2px rgba(255, 255, 255, 0.7);
+  transform: scale(0.98);
 }
 
-/* Fog/mist effect behind the glass button */
-.orbitar-refine-shine {
-  position: absolute;
-  inset: -50%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(180, 180, 180, 0.4) 0%,
-    rgba(160, 160, 160, 0.3) 25%,
-    rgba(140, 140, 140, 0.2) 50%,
-    transparent 70%
-  );
-  filter: blur(20px);
-  opacity: 0.6;
-  pointer-events: none;
-  animation: fogDrift 8s ease-in-out infinite;
-  z-index: 0;
-}
+/* ensure content sits above the sheen */
+.orbitar-refine-button > * {
+  position: relative;
+  z-index: 2;
 
-@keyframes fogDrift {
-  0%, 100% {
-    transform: translate(-10%, -10%) scale(1);
-    opacity: 0.5;
-  }
-  25% {
-    transform: translate(5%, 8%) scale(1.1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: translate(10%, -5%) scale(0.95);
-    opacity: 0.6;
-  }
-  75% {
-    transform: translate(-8%, 10%) scale(1.05);
-    opacity: 0.65;
-  }
-}
 
 .orbitar-refine-button:hover .orbitar-refine-shine {
   animation: fogDrift 4s ease-in-out infinite;
-  opacity: 0.8;
+  opacity: 0.6;
+}
+
+/* Displacement filter helper for refine button (applied when JS injects filter) */
+.orbitar-refine-with-filter {
+  will-change: filter;
+  transition: filter 220ms ease;
+  /* keep the visual identity unchanged when filter is applied */
+  -webkit-filter: none;
+  filter: none;
 }
 
 /* Error message */
 .orbitar-error {
-  display: none;
   color: #ff4444;
   font-size: 12px;
   margin-top: 4px;
 }
+.orbitar-error:empty {
+  display: none;
+}
+
+/* ============================
+   Light Mode Support
+   ============================ */
+@media (prefers-color-scheme: light) {
+  /* Main Panel Bar */
+  .orbitar-chatgpt-bar {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.85),
+      rgba(255, 255, 255, 0.65)
+    );
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08),
+      inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  }
+
+  /* Panel Glow */
+  .orbitar-panel-glow {
+    background: linear-gradient(
+      to bottom right,
+      rgba(255, 255, 255, 0.4),
+      transparent,
+      transparent
+    );
+  }
+
+  /* Pills (Category/Template) */
+  .orbitar-pill {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.9),
+      rgba(245, 245, 245, 0.8)
+    );
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04),
+      inset 0 1px 1px rgba(255, 255, 255, 1);
+  }
+  .orbitar-pill:hover {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 1),
+      rgba(250, 250, 250, 0.9)
+    );
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06),
+      inset 0 1px 2px rgba(255, 255, 255, 1);
+  }
+
+  /* Text Colors - Light Mode */
+  .orbitar-pill-value {
+    color: #1a1a1a;
+  }
+  .orbitar-pill:hover .orbitar-pill-value {
+    color: #000000;
+  }
+  /* Ensure input labels are visible */
+  .orbitar-input-label {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  /* Ensure usage text is visible */
+  .orbitar-usage-text {
+    color: rgba(0, 0, 0, 0.5);
+  }
+  .orbitar-pill-chevron {
+    color: rgba(0, 0, 0, 0.4);
+  }
+  .orbitar-pill:hover .orbitar-pill-chevron {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  .orbitar-input-label {
+    color: rgba(0, 0, 0, 0.5);
+  }
+  .orbitar-usage-text {
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  /* Select Dropdown (Native) */
+  .orbitar-select-native option {
+    background: #ffffff;
+    color: #1a1a1a;
+  }
+  .orbitar-select-native option:checked {
+    background: #e5e7eb;
+    color: #000000;
+  }
+
+  /* Refine Button - Light Mode Rotating Border */
+  .orbitar-refine-button {
+    background: transparent; /* Handled by pseudo */
+    border: none; /* Remove default border */
+    color: #1a1a1a;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    text-shadow: none;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+  
+  /* Rotating border container */
+  .orbitar-refine-button::before {
+    content: "";
+    position: absolute;
+    inset: -2px; /* Border width */
+    z-index: -1;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgba(0, 0, 0, 0.1) 60deg,
+      rgba(0, 0, 0, 0.8) 120deg,
+      rgba(0, 0, 0, 0.1) 180deg,
+      transparent 360deg
+    );
+    animation: rotateBorder 4s linear infinite;
+    border-radius: 9999px;
+  }
+  
+  /* Inner mask to create the border effect */
+  .orbitar-refine-button::after {
+    content: "";
+    position: absolute;
+    inset: 1px; /* Inner spacing */
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 1) 0%,
+      rgba(245, 245, 245, 1) 100%
+    );
+    border-radius: 9999px;
+    z-index: -1;
+  }
+
+  .orbitar-refine-button:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  @keyframes rotateBorder {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pro Badge - Light Mode */
+  .orbitar-plan-pill[data-plan="pro"],
+  .orbitar-plan-pill[data-plan="Pro"] {
+    background: #000000 !important;
+    color: #ffffff !important;
+    font-weight: 800;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  .orbitar-plan-pill[data-plan="pro"]::after {
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(255, 255, 255, 0.6) 50%,
+      transparent 100%
+    );
+  }
+
+  /* Recommendation Text */
+  .orbitar-recommendation-text {
+    background: linear-gradient(
+      135deg,
+      rgba(99, 102, 241, 0.1),
+      rgba(34, 211, 238, 0.08)
+    );
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: #4f46e5;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+  }
+
+  /* Dyson Icon */
+  .orbitar-chatgpt-icon {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.7)
+    );
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08),
+      inset 0 1px 2px rgba(255, 255, 255, 1);
+  }
+  .orbitar-chatgpt-icon svg {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  .orbitar-chatgpt-icon:hover svg {
+    color: #000000;
+  }
+}
+
