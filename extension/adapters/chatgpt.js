@@ -2,7 +2,7 @@
 
 const OrbitarChatGPTAdapter = {
   name: "ChatGPT",
-  
+
   isMatch() {
     const host = location.hostname;
     return (
@@ -60,7 +60,9 @@ const OrbitarChatGPTAdapter = {
       if (flexContainer) {
         // Insert as first child of the flex container (before mic)
         flexContainer.insertBefore(btn, flexContainer.firstChild);
-        console.log("[Orbitar] Icon placed in grid-area:trailing flex container");
+        console.log(
+          "[Orbitar] Icon placed in grid-area:trailing flex container"
+        );
         return btn;
       }
     }
@@ -89,7 +91,9 @@ const OrbitarChatGPTAdapter = {
       return btn;
     }
 
-    console.warn("[Orbitar] Icon placement failed - no suitable container found");
+    console.warn(
+      "[Orbitar] Icon placement failed - no suitable container found"
+    );
     return null;
   },
 
@@ -98,9 +102,7 @@ const OrbitarChatGPTAdapter = {
     let panelContainer = null;
 
     // Strategy 1: Find the form element (immediate parent of grid)
-    const form =
-      composer.closest("form") ||
-      composer.querySelector("form");
+    const form = composer.closest("form") || composer.querySelector("form");
 
     if (form) {
       // Find the grid container inside the form
@@ -137,21 +139,65 @@ const OrbitarChatGPTAdapter = {
     panelContainer.insertBefore(panelEl, panelContainer.firstChild);
     return panelEl;
   },
-  
-  // Helper to get current text from the composer
+
+  // Helper to get current text from the composer - made more robust for nested or focused inputs
   getText(composer) {
-    const textarea = composer.querySelector("textarea") || 
-                     composer.querySelector('[contenteditable="true"]');
-    if (textarea) {
-      return textarea.value || textarea.innerText || "";
+    try {
+      if (!composer) return "";
+      // Prefer any textarea descendants (most reliable)
+      const textareas = composer.querySelectorAll("textarea");
+      for (const ta of textareas) {
+        if (ta && typeof ta.value === "string") {
+          const v = (ta.value || "").trim();
+          if (v.length) return v;
+        }
+      }
+
+      // Look for contenteditable or role=textbox descendants
+      const editable =
+        composer.querySelector('[contenteditable="true"]') ||
+        composer.querySelector('[role="textbox"]') ||
+        composer.querySelector('[contenteditable=""]');
+      if (editable) {
+        const t = (editable.innerText || editable.textContent || "").trim();
+        if (t.length) return t;
+      }
+
+      // Fallback: if a focused element is a textarea or contenteditable, return its content
+      const active = document.activeElement;
+      if (active) {
+        if (active.tagName === "TEXTAREA") {
+          return (active.value || "").trim();
+        }
+        if (active.isContentEditable) {
+          return (active.innerText || active.textContent || "").trim();
+        }
+      }
+
+      // Last resort: try any descendant input-like element
+      const anyTa = composer.querySelector(
+        "textarea, [contenteditable='true'], [role='textbox']"
+      );
+      if (anyTa) {
+        return (
+          anyTa.value ||
+          anyTa.innerText ||
+          anyTa.textContent ||
+          ""
+        ).trim();
+      }
+
+      return "";
+    } catch (_e) {
+      return "";
     }
-    return "";
   },
 
   // Helper to set text in the composer
   setText(composer, text) {
-    const textarea = composer.querySelector("textarea") || 
-                     composer.querySelector('[contenteditable="true"]');
+    const textarea =
+      composer.querySelector("textarea") ||
+      composer.querySelector('[contenteditable="true"]');
     if (!textarea) return;
 
     if (textarea.tagName === "TEXTAREA") {
@@ -162,7 +208,7 @@ const OrbitarChatGPTAdapter = {
       textarea.innerText = text;
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
     }
-  }
+  },
 };
 
 // Expose to global scope so content.js can find it

@@ -266,17 +266,41 @@ function ensureIntegratedIcon(composer) {
     }
   };
 
-  integratedIconEl = activeAdapter.ensureIcon(composer, createDysonButton, togglePanel);
+  integratedIconEl = activeAdapter.ensureIcon(
+    composer,
+    createDysonButton,
+    togglePanel
+  );
 }
 
 function showIntegratedPanel() {
-  if (!integratedComposer || !activeAdapter) return;
+  if (!activeAdapter) return;
+  // Ensure we have a composer reference — try to recover if it wasn't set earlier
+  if (!integratedComposer) {
+    try {
+      const candidate =
+        document.activeElement ||
+        document.querySelector("main textarea") ||
+        document.querySelector("textarea[placeholder]") ||
+        document.querySelector('[contenteditable="true"][role="textbox"]') ||
+        document.querySelector('div[contenteditable="true"]');
+      if (candidate && activeAdapter && activeAdapter.findComposer) {
+        const found = activeAdapter.findComposer(candidate);
+        if (found) integratedComposer = found;
+      }
+    } catch (_e) {}
+  }
+  if (!integratedComposer) return;
   if (integratedPanelEl && integratedPanelEl.isConnected) return;
 
   const panel = createPanel();
 
   // Wire up events
   const refineBtn = panel.querySelector("#refine-btn");
+  // Prevent the refine button from taking focus away from the composer so we can reliably read text
+  try {
+    refineBtn.addEventListener("mousedown", (e) => e.preventDefault());
+  } catch (_e) {}
   const planBadge = panel.querySelector("#orbitar-plan-badge");
   const usageText = panel.querySelector("#orbitar-usage-text");
   const categorySelect = panel.querySelector("#orbitar-category");
@@ -286,17 +310,77 @@ function showIntegratedPanel() {
   const categoryValueEl = panel.querySelector("#orbitar-category-value");
   const templateValueEl = panel.querySelector("#orbitar-template-value");
 
+  // Ensure there's a compact suggestion element (used by the UI)
+  const suggestionTextEl =
+    panel.querySelector("#orbitar-suggestion-text") ||
+    (function () {
+      const el = document.createElement("span");
+      el.className = "orbitar-suggestion-text";
+      el.id = "orbitar-suggestion-text";
+      el.style.display = "none";
+      // Append to left column so it's visible in the panel layout
+      const leftCol =
+        panel.querySelector(".orbitar-chatgpt-left") ||
+        panel.querySelector(".orbitar-labels-row");
+      if (leftCol) leftCol.appendChild(el);
+      el.style.cursor = "pointer";
+      // Make the compact suggestion clickable: apply category/template when clicked
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        try {
+          const cat = el.dataset.category;
+          const tpl = el.dataset.templateId;
+          if (cat) {
+            categorySelect.value = cat;
+            populateTemplateOptions(cat);
+          }
+          if (tpl) {
+            templateSelect.value = tpl;
+          }
+          try {
+            categoryValueEl.textContent =
+              categorySelect.options[categorySelect.selectedIndex]
+                ?.textContent || categorySelect.value;
+            templateValueEl.textContent =
+              templateSelect.options[templateSelect.selectedIndex]
+                ?.textContent || templateSelect.value;
+          } catch (_e) {}
+          // Hide the compact suggestion after applying
+          el.style.display = "none";
+        } catch (_e) {}
+      });
+      return el;
+    })();
+
   // Fetch User Plan and Usage
+  // Local counters so the UI can show "remaining / total" and decrement on successful refine
+  let usedCount = 0;
+  let planLimit = 10;
   sendMessageSafe({ type: "GET_USER_PLAN" }, (resp) => {
     if (resp && resp.plan) {
       const planName = resp.plan.charAt(0).toUpperCase() + resp.plan.slice(1);
       planBadge.textContent = planName;
       planBadge.setAttribute("data-plan", resp.plan);
-      
-      if (typeof resp.dailyUsageCount === 'number' && typeof resp.limit === 'number') {
-        usageText.textContent = `${resp.dailyUsageCount}/${resp.limit}`;
+
+      if (
+        typeof resp.dailyUsageCount === "number" &&
+        typeof resp.limit === "number"
+      ) {
+        usedCount = resp.dailyUsageCount;
+        planLimit = resp.limit;
+      } else {
+        usedCount = 0;
+        planLimit = 10;
       }
-      
+
+      const remaining = Math.max(0, planLimit - usedCount);
+      usageText.textContent = `${remaining} / ${planLimit} left today`;
+      usageText.setAttribute(
+        "title",
+        `${remaining} of ${planLimit} refinements remaining today`
+      );
+
       try {
         const pill = planBadge.parentElement;
         if (pill) {
@@ -306,7 +390,14 @@ function showIntegratedPanel() {
     } else {
       planBadge.textContent = "Free";
       planBadge.setAttribute("data-plan", "free");
-      usageText.textContent = "0/10";
+      usedCount = 0;
+      planLimit = 10;
+      const remaining = Math.max(0, planLimit - usedCount);
+      usageText.textContent = `${remaining} / ${planLimit} left today`;
+      usageText.setAttribute(
+        "title",
+        `${remaining} of ${planLimit} refinements remaining today`
+      );
       try {
         const pill = planBadge.parentElement;
         if (pill) {
@@ -404,6 +495,10 @@ function showIntegratedPanel() {
         text: text,
       },
       (resp) => {
+        // Hide compact suggestion by default unless we have a good response
+        try {
+          suggestionTextEl.style.display = "none";
+        } catch (_e) {}
         if (!resp || resp.error) return;
         if (userChangedCategory || userChangedTemplate) return;
         const { templateId, category } = resp;
@@ -421,7 +516,8 @@ function showIntegratedPanel() {
                 templateSelect.options[templateSelect.selectedIndex]
                   ?.textContent || templateId;
             } catch (_e) {}
-            
+
+            // Top recommendation card (fancier)
             suggestionSpan.innerHTML = `
               <span>Recommended: ${niceCategoryLabel(category)} → ${
               group.find((g) => g.value === templateId)?.label || templateId
@@ -430,10 +526,33 @@ function showIntegratedPanel() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             `;
+            // Ensure the recommendation block is visible and readable across themes
             suggestionSpan.style.display = "inline-flex";
             suggestionSpan.style.alignItems = "center";
+            suggestionSpan.style.visibility = "visible";
+            suggestionSpan.style.opacity = "1";
+            suggestionSpan.style.position =
+              suggestionSpan.style.position || "relative";
+            suggestionSpan.style.zIndex = 9999;
 
-            const dismissBtn = suggestionSpan.querySelector("#orbitar-dismiss-recommendation");
+            // Compact inline suggestion (used in the labels row)
+            try {
+              const compactLabel =
+                group.find((g) => g.value === templateId)?.label || templateId;
+              suggestionTextEl.textContent = `${niceCategoryLabel(
+                category
+              )} → ${compactLabel}`;
+              // store metadata so the compact suggestion can be applied when clicked
+              try {
+                suggestionTextEl.dataset.category = category;
+                suggestionTextEl.dataset.templateId = templateId;
+              } catch (_e) {}
+              suggestionTextEl.style.display = "inline";
+            } catch (_e) {}
+
+            const dismissBtn = suggestionSpan.querySelector(
+              "#orbitar-dismiss-recommendation"
+            );
             if (dismissBtn) {
               dismissBtn.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -442,13 +561,16 @@ function showIntegratedPanel() {
                 categorySelect.value = ORBITAR_DEFAULT_CATEGORY;
                 populateTemplateOptions(ORBITAR_DEFAULT_CATEGORY);
                 templateSelect.value = ORBITAR_DEFAULT_TEMPLATE_ID;
-                
+
                 try {
                   categoryValueEl.textContent = ORBITAR_DEFAULT_CATEGORY;
                   templateValueEl.textContent = "General prompt";
                 } catch (_e) {}
 
                 suggestionSpan.style.display = "none";
+                try {
+                  suggestionTextEl.style.display = "none";
+                } catch (_e) {}
                 userChangedCategory = false;
                 userChangedTemplate = false;
               });
@@ -512,8 +634,70 @@ function showIntegratedPanel() {
   }, 250);
 
   refineBtn.addEventListener("click", () => {
-    const text = activeAdapter.getText(integratedComposer);
-    if (!text) {
+    // Robustly obtain text: prefer adapter, fall back to focused element and global selectors
+    let text = "";
+    try {
+      if (activeAdapter && activeAdapter.getText) {
+        text = activeAdapter.getText(integratedComposer) || "";
+      }
+    } catch (_e) {
+      text = "";
+    }
+
+    // Fallback to currently focused editable element if adapter didn't find text
+    if ((!text || text.trim().length === 0) && document.activeElement) {
+      const a = document.activeElement;
+      try {
+        if (a.tagName === "TEXTAREA") {
+          text = a.value || "";
+        } else if (a.isContentEditable) {
+          text = a.innerText || a.textContent || "";
+        }
+      } catch (_e) {
+        text = text || "";
+      }
+    }
+
+    // Final fallback: try common global selector patterns (useful when focus moved)
+    if (!text || text.trim().length === 0) {
+      try {
+        const globalEl =
+          document.querySelector("main textarea") ||
+          document.querySelector("textarea[placeholder]") ||
+          document.querySelector('[contenteditable="true"][role="textbox"]') ||
+          document.querySelector('div[contenteditable="true"]') ||
+          document.querySelector('[role="textbox"]');
+        if (globalEl) {
+          // If we found a global editable, prefer using its parent composer if possible
+          try {
+            if (activeAdapter && activeAdapter.findComposer) {
+              const candidateComposer = activeAdapter.findComposer(globalEl);
+              if (candidateComposer) {
+                integratedComposer = candidateComposer;
+              }
+            }
+          } catch (_e) {
+            // ignore
+          }
+
+          if (globalEl.tagName === "TEXTAREA") {
+            text = globalEl.value || "";
+          } else if (globalEl.isContentEditable) {
+            text = globalEl.innerText || globalEl.textContent || "";
+          } else {
+            text =
+              globalEl.value ||
+              globalEl.innerText ||
+              globalEl.textContent ||
+              "";
+          }
+        }
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+
+    if (!text || text.trim().length === 0) {
       errorMsg.textContent = "No text";
       return;
     }
@@ -561,6 +745,18 @@ function showIntegratedPanel() {
         }
 
         activeAdapter.setText(integratedComposer, refined);
+
+        // Update local usage counters so the UI shows remaining / total and counts down
+        try {
+          usedCount = (typeof usedCount === "number" ? usedCount : 0) + 1;
+          const remaining = Math.max(0, planLimit - usedCount);
+          usageText.textContent = `${remaining} / ${planLimit} left today`;
+          usageText.setAttribute(
+            "title",
+            `${remaining} of ${planLimit} refinements remaining today`
+          );
+        } catch (_e) {}
+
         removeIntegratedPanel();
       }
     );
@@ -571,6 +767,27 @@ function showIntegratedPanel() {
   } catch (_e) {}
 
   integratedPanelEl = activeAdapter.injectPanel(integratedComposer, panel);
+
+  // Ensure standalone recommendation panel exists (restore the original Recommendation component)
+  if (!document.getElementById("orbitar-recommendation-panel")) {
+    try {
+      const rec = document.createElement("div");
+      rec.id = "orbitar-recommendation-panel";
+      rec.className = "orbitar-recommendation-text";
+      rec.style.display = "none";
+      // Place it just after the injected panel so it appears visually near the bar
+      if (integratedPanelEl && integratedPanelEl.parentElement) {
+        integratedPanelEl.parentElement.insertBefore(
+          rec,
+          integratedPanelEl.nextSibling
+        );
+      } else {
+        document.body.appendChild(rec);
+      }
+    } catch (e) {
+      /* ignore errors creating recommendation panel */
+    }
+  }
 }
 
 function removeIntegratedPanel() {
@@ -590,7 +807,7 @@ function debounce(fn, wait = 200) {
 
 function tryAttach() {
   if (!activeAdapter) return;
-  
+
   // Try to find a composer even without focus
   const candidate =
     document.querySelector("main textarea") ||
@@ -620,7 +837,7 @@ function init() {
   }
 
   injectOrbitarAssets();
-  
+
   // Initial attach attempt
   setTimeout(tryAttach, 1000);
   setTimeout(tryAttach, 3000);
