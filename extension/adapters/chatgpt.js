@@ -195,18 +195,169 @@ const OrbitarChatGPTAdapter = {
 
   // Helper to set text in the composer
   setText(composer, text) {
-    const textarea =
-      composer.querySelector("textarea") ||
-      composer.querySelector('[contenteditable="true"]');
-    if (!textarea) return;
+    console.log("[Orbitar setText] === START ===");
+    console.log("[Orbitar setText] Composer:", composer);
+    console.log("[Orbitar setText] Text to set:", text);
+    
+    try {
+      // CRITICAL: Check for contenteditable FIRST (ChatGPT uses ProseMirror contenteditable, not textarea)
+      // The textarea is just a hidden fallback
+      let textarea = composer.querySelector('[contenteditable="true"]');
+      
+      if (!textarea) {
+        // Fallback to textarea, but skip hidden ones
+        const textareas = composer.querySelectorAll("textarea");
+        for (const ta of textareas) {
+          const style = window.getComputedStyle(ta);
+          if (style.display !== "none" && style.visibility !== "hidden") {
+            textarea = ta;
+            break;
+          }
+        }
+      }
+      
+      if (!textarea) {
+        console.error("[Orbitar setText] ERROR: No visible textarea or contenteditable found!");
+        console.log("[Orbitar setText] Composer HTML:", composer.innerHTML);
+        return false;
+      }
 
-    if (textarea.tagName === "TEXTAREA") {
-      textarea.value = text;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-      textarea.dispatchEvent(new Event("change", { bubbles: true }));
-    } else {
-      textarea.innerText = text;
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      console.log("[Orbitar setText] Found element:", textarea.tagName, textarea);
+      console.log("[Orbitar setText] Element contenteditable:", textarea.contentEditable);
+      console.log("[Orbitar setText] Element display style:", window.getComputedStyle(textarea).display);
+
+      if (textarea.tagName === "TEXTAREA") {
+        console.log("[Orbitar setText] Using TEXTAREA approach");
+        
+        // Store old value for comparison
+        const oldValue = textarea.value;
+        console.log("[Orbitar setText] Old value:", oldValue);
+        
+        // Method 1: Try using native setter
+        try {
+          const nativeTextareaSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            "value"
+          ).set;
+          nativeTextareaSetter.call(textarea, text);
+          console.log("[Orbitar setText] Native setter applied");
+        } catch (e) {
+          console.warn("[Orbitar setText] Native setter failed:", e);
+          textarea.value = text;
+        }
+        
+        // Verify value was set
+        console.log("[Orbitar setText] New value:", textarea.value);
+        console.log("[Orbitar setText] Value changed:", textarea.value !== oldValue);
+        
+        // Trigger React/input events
+        console.log("[Orbitar setText] Dispatching events...");
+        
+        // Event 1: input event (most important for React)
+        const inputEvent = new Event("input", { bubbles: true, cancelable: true });
+        textarea.dispatchEvent(inputEvent);
+        console.log("[Orbitar setText] Dispatched: input");
+        
+        // Event 2: change event  
+        const changeEvent = new Event("change", { bubbles: true });
+        textarea.dispatchEvent(changeEvent);
+        console.log("[Orbitar setText] Dispatched: change");
+        
+        // Event 3: InputEvent with data
+        try {
+          const inputEventWithData = new InputEvent("input", {
+            bubbles: true,
+            cancelable: true,
+            inputType: "insertText",
+            data: text
+          });
+          textarea.dispatchEvent(inputEventWithData);
+          console.log("[Orbitar setText] Dispatched: InputEvent with data");
+        } catch (e) {
+          console.warn("[Orbitar setText] InputEvent failed:", e);
+        }
+        
+        // Focus the textarea to ensure React picks up changes
+        console.log("[Orbitar setText] Focusing textarea...");
+        textarea.focus();
+        
+        // Trigger one more input event after focus
+        setTimeout(() => {
+          const finalInput = new Event("input", { bubbles: true });
+          textarea.dispatchEvent(finalInput);
+          console.log("[Orbitar setText] Dispatched final input after focus");
+          
+          // Verify final state
+          console.log("[Orbitar setText] Final value:", textarea.value);
+          console.log("[Orbitar setText] === COMPLETE (TEXTAREA) ===");
+        }, 50);
+        
+        return true;
+        
+      } else {
+        console.log("[Orbitar setText] Using CONTENTEDITABLE approach");
+        
+        // For contenteditable (ProseMirror)
+        const oldContent = textarea.textContent || textarea.innerText || "";
+        console.log("[Orbitar setText] Old content:", oldContent);
+        
+        // Clear existing content
+        textarea.innerHTML = "";
+        
+        // Split text by newlines and create proper structure to preserve formatting
+        const lines = text.split('\n');
+        console.log("[Orbitar setText] Text has", lines.length, "lines");
+        
+        // For each line, create a div (ProseMirror uses divs for line breaks)
+        lines.forEach((line, index) => {
+          const lineDiv = document.createElement('div');
+          if (line.trim() === '') {
+            // Empty line - add a br to preserve the line break
+            lineDiv.appendChild(document.createElement('br'));
+          } else {
+            // Non-empty line - add text content
+            lineDiv.textContent = line;
+          }
+          textarea.appendChild(lineDiv);
+        });
+        
+        console.log("[Orbitar setText] New content set with", lines.length, "line divs");
+        
+        // Dispatch input events
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+        console.log("[Orbitar setText] Dispatched events");
+        
+        // Focus the element
+        textarea.focus();
+        console.log("[Orbitar setText] Focused contenteditable");
+        
+        // Set cursor to end
+        try {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(textarea);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          console.log("[Orbitar setText] Set cursor to end");
+        } catch (e) {
+          console.warn("[Orbitar setText] Could not set cursor:", e);
+        }
+        
+        // Trigger additional input event after a short delay
+        setTimeout(() => {
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          console.log("[Orbitar setText] Dispatched delayed input event");
+          console.log("[Orbitar setText] === COMPLETE (CONTENTEDITABLE) ===");
+        }, 50);
+        
+        return true;
+      }
+    } catch (error) {
+      console.error("[Orbitar setText] EXCEPTION:", error);
+      console.error("[Orbitar setText] Stack:", error.stack);
+      return false;
     }
   },
 };

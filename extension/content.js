@@ -238,11 +238,10 @@ function createPanel() {
 
       <div class="orbitar-chatgpt-right">
         <div class="orbitar-refine-wrapper">
-          <button class="orbitar-refine-button" id="refine-btn">
-             <div class="orbitar-refine-shine"></div>
-             <span style="position:relative; z-index:10;">Refine</span>
-          </button>
           <span class="orbitar-usage-text" id="orbitar-usage-text"></span>
+          <button class="orbitar-refine-button" id="refine-btn">
+             <span>Refine</span>
+          </button>
         </div>
       </div>
     </div>
@@ -310,53 +309,14 @@ function showIntegratedPanel() {
   const categoryValueEl = panel.querySelector("#orbitar-category-value");
   const templateValueEl = panel.querySelector("#orbitar-template-value");
 
-  // Ensure there's a compact suggestion element (used by the UI)
-  const suggestionTextEl =
-    panel.querySelector("#orbitar-suggestion-text") ||
-    (function () {
-      const el = document.createElement("span");
-      el.className = "orbitar-suggestion-text";
-      el.id = "orbitar-suggestion-text";
-      el.style.display = "none";
-      // Append to left column so it's visible in the panel layout
-      const leftCol =
-        panel.querySelector(".orbitar-chatgpt-left") ||
-        panel.querySelector(".orbitar-labels-row");
-      if (leftCol) leftCol.appendChild(el);
-      el.style.cursor = "pointer";
-      // Make the compact suggestion clickable: apply category/template when clicked
-      el.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        try {
-          const cat = el.dataset.category;
-          const tpl = el.dataset.templateId;
-          if (cat) {
-            categorySelect.value = cat;
-            populateTemplateOptions(cat);
-          }
-          if (tpl) {
-            templateSelect.value = tpl;
-          }
-          try {
-            categoryValueEl.textContent =
-              categorySelect.options[categorySelect.selectedIndex]
-                ?.textContent || categorySelect.value;
-            templateValueEl.textContent =
-              templateSelect.options[templateSelect.selectedIndex]
-                ?.textContent || templateSelect.value;
-          } catch (_e) {}
-          // Hide the compact suggestion after applying
-          el.style.display = "none";
-        } catch (_e) {}
-      });
-      return el;
-    })();
+  // REMOVED: Duplicate compact suggestion element (caused duplicate "Recommended" text)
+  // The top recommendation pill (.orbitar-recommendation-text) already serves this purpose
+  // const suggestionTextEl = ...
 
   // Fetch User Plan and Usage
   // Local counters so the UI can show "remaining / total" and decrement on successful refine
   let usedCount = 0;
-  let planLimit = 10;
+  let planLimit = 5; // Free user default
   sendMessageSafe({ type: "GET_USER_PLAN" }, (resp) => {
     if (resp && resp.plan) {
       const planName = resp.plan.charAt(0).toUpperCase() + resp.plan.slice(1);
@@ -371,11 +331,13 @@ function showIntegratedPanel() {
         planLimit = resp.limit;
       } else {
         usedCount = 0;
-        planLimit = 10;
+        planLimit = 5;
       }
 
       const remaining = Math.max(0, planLimit - usedCount);
-      usageText.textContent = `${remaining} / ${planLimit} left today`;
+      const plan = resp.plan || "free";
+      const suffix = plan === "free" ? " left today" : "";
+      usageText.textContent = `${remaining} / ${planLimit}${suffix}`;
       usageText.setAttribute(
         "title",
         `${remaining} of ${planLimit} refinements remaining today`
@@ -391,7 +353,7 @@ function showIntegratedPanel() {
       planBadge.textContent = "Free";
       planBadge.setAttribute("data-plan", "free");
       usedCount = 0;
-      planLimit = 10;
+      planLimit = 5;
       const remaining = Math.max(0, planLimit - usedCount);
       usageText.textContent = `${remaining} / ${planLimit} left today`;
       usageText.setAttribute(
@@ -495,10 +457,7 @@ function showIntegratedPanel() {
         text: text,
       },
       (resp) => {
-        // Hide compact suggestion by default unless we have a good response
-        try {
-          suggestionTextEl.style.display = "none";
-        } catch (_e) {}
+        // Note: Removed compact suggestion element (suggestionTextEl) - it was causing duplicate display
         if (!resp || resp.error) return;
         if (userChangedCategory || userChangedTemplate) return;
         const { templateId, category } = resp;
@@ -535,20 +494,7 @@ function showIntegratedPanel() {
               suggestionSpan.style.position || "relative";
             suggestionSpan.style.zIndex = 9999;
 
-            // Compact inline suggestion (used in the labels row)
-            try {
-              const compactLabel =
-                group.find((g) => g.value === templateId)?.label || templateId;
-              suggestionTextEl.textContent = `${niceCategoryLabel(
-                category
-              )} → ${compactLabel}`;
-              // store metadata so the compact suggestion can be applied when clicked
-              try {
-                suggestionTextEl.dataset.category = category;
-                suggestionTextEl.dataset.templateId = templateId;
-              } catch (_e) {}
-              suggestionTextEl.style.display = "inline";
-            } catch (_e) {}
+            // REMOVED: Compact inline suggestion (was causing duplicate display)
 
             const dismissBtn = suggestionSpan.querySelector(
               "#orbitar-dismiss-recommendation"
@@ -568,9 +514,6 @@ function showIntegratedPanel() {
                 } catch (_e) {}
 
                 suggestionSpan.style.display = "none";
-                try {
-                  suggestionTextEl.style.display = "none";
-                } catch (_e) {}
                 userChangedCategory = false;
                 userChangedTemplate = false;
               });
@@ -634,32 +577,43 @@ function showIntegratedPanel() {
   }, 250);
 
   refineBtn.addEventListener("click", () => {
+    console.log("[Orbitar Refine] === REFINE BUTTON CLICKED ===");
+    console.log("[Orbitar Refine] integratedComposer:", integratedComposer);
+    console.log("[Orbitar Refine] activeAdapter:", activeAdapter);
+    
     // Robustly obtain text: prefer adapter, fall back to focused element and global selectors
     let text = "";
     try {
       if (activeAdapter && activeAdapter.getText) {
         text = activeAdapter.getText(integratedComposer) || "";
+        console.log("[Orbitar Refine] Got text from adapter:", text);
       }
     } catch (_e) {
+      console.error("[Orbitar Refine] Adapter getText failed:", _e);
       text = "";
     }
 
     // Fallback to currently focused editable element if adapter didn't find text
     if ((!text || text.trim().length === 0) && document.activeElement) {
+      console.log("[Orbitar Refine] Trying focused element fallback");
       const a = document.activeElement;
       try {
         if (a.tagName === "TEXTAREA") {
           text = a.value || "";
+          console.log("[Orbitar Refine] Got text from focused textarea:", text);
         } else if (a.isContentEditable) {
           text = a.innerText || a.textContent || "";
+          console.log("[Orbitar Refine] Got text from focused contenteditable:", text);
         }
       } catch (_e) {
+        console.error("[Orbitar Refine] Focused element fallback failed:", _e);
         text = text || "";
       }
     }
 
     // Final fallback: try common global selector patterns (useful when focus moved)
     if (!text || text.trim().length === 0) {
+      console.log("[Orbitar Refine] Trying global selector fallback");
       try {
         const globalEl =
           document.querySelector("main textarea") ||
@@ -668,16 +622,18 @@ function showIntegratedPanel() {
           document.querySelector('div[contenteditable="true"]') ||
           document.querySelector('[role="textbox"]');
         if (globalEl) {
+          console.log("[Orbitar Refine] Found global element:", globalEl.tagName);
           // If we found a global editable, prefer using its parent composer if possible
           try {
             if (activeAdapter && activeAdapter.findComposer) {
               const candidateComposer = activeAdapter.findComposer(globalEl);
               if (candidateComposer) {
                 integratedComposer = candidateComposer;
+                console.log("[Orbitar Refine] Updated integratedComposer from global element");
               }
             }
           } catch (_e) {
-            // ignore
+            console.warn("[Orbitar Refine] Could not update composer:", _e);
           }
 
           if (globalEl.tagName === "TEXTAREA") {
@@ -691,25 +647,31 @@ function showIntegratedPanel() {
               globalEl.textContent ||
               "";
           }
+          console.log("[Orbitar Refine] Got text from global element:", text);
         }
       } catch (_e) {
-        /* ignore */
+        console.error("[Orbitar Refine] Global selector fallback failed:", _e);
       }
     }
 
     if (!text || text.trim().length === 0) {
+      console.error("[Orbitar Refine] ERROR: No text found!");
       errorMsg.textContent = "No text";
       return;
     }
 
+    console.log("[Orbitar Refine] Final text to refine:", text);
+    console.log("[Orbitar Refine] Category:", categorySelect.value);
+    console.log("[Orbitar Refine] Template:", templateSelect.value);
+
+    console.log("[Orbitar Refine] Setting loading state...");
     const prevHTML = refineBtn.innerHTML;
     refineBtn.setAttribute("data-prev-html", prevHTML);
     refineBtn.disabled = true;
     refineBtn.setAttribute("aria-busy", "true");
     errorMsg.textContent = "";
     refineBtn.innerHTML = `
-           <div class="orbitar-refine-shine"></div>
-           <span style="position:relative; z-index:10; display:inline-flex; align-items:center;">
+           <span style="display:inline-flex; align-items:center; gap:8px;">
              <svg width="16" height="16" viewBox="0 0 50 50" aria-label="Loading">
                <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="31.4 188.4">
                  <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.9s" repeatCount="indefinite"/>
@@ -718,6 +680,7 @@ function showIntegratedPanel() {
            </span>
     `;
 
+    console.log("[Orbitar Refine] Sending API request...");
     sendMessageSafe(
       {
         type: "REFINE_TEXT",
@@ -726,38 +689,62 @@ function showIntegratedPanel() {
         category: categorySelect.value,
       },
       (response) => {
+        console.log("[Orbitar Refine] === API RESPONSE RECEIVED ===");
+        console.log("[Orbitar Refine] Response:", response);
+        console.log("[Orbitar Refine] Chrome runtime error:", chrome.runtime.lastError);
+        
         const original = refineBtn.getAttribute("data-prev-html");
         if (original) refineBtn.innerHTML = original;
         refineBtn.disabled = false;
         refineBtn.setAttribute("aria-busy", "false");
+        console.log("[Orbitar Refine] Restored button state");
 
         if (!response || response.error || chrome.runtime.lastError) {
-          errorMsg.textContent =
-            response?.error ||
-            "Orbitar: backend unreachable. Is dev server running?";
+          const errorText = response?.error || chrome.runtime.lastError?.message || "Orbitar: backend unreachable. Is dev server running?";
+          console.error("[Orbitar Refine] ERROR:", errorText);
+          errorMsg.textContent = errorText;
           return;
         }
 
+        console.log("[Orbitar Refine] Response is valid");
         const refined = response.refinedText || "";
+        console.log("[Orbitar Refine] Refined text:", refined);
+        console.log("[Orbitar Refine] Refined text length:", refined.length);
+        console.log("[Orbitar Refine] Original text:", text);
+        
         if ((refined || "").trim() === (text || "").trim()) {
+          console.warn("[Orbitar Refine] No changes suggested (text is the same)");
           errorMsg.textContent = "No changes suggested.";
           return;
         }
 
-        activeAdapter.setText(integratedComposer, refined);
+        console.log("[Orbitar Refine] Calling setText...");
+        console.log("[Orbitar Refine] Composer to use:", integratedComposer);
+        const setTextResult = activeAdapter.setText(integratedComposer, refined);
+        console.log("[Orbitar Refine] setText returned:", setTextResult);
 
         // Update local usage counters so the UI shows remaining / total and counts down
         try {
           usedCount = (typeof usedCount === "number" ? usedCount : 0) + 1;
           const remaining = Math.max(0, planLimit - usedCount);
-          usageText.textContent = `${remaining} / ${planLimit} left today`;
+          const suffix = (planBadge.getAttribute('data-plan') === "free") ? " left today" : "";
+          usageText.textContent = `${remaining} / ${planLimit}${suffix}`;
           usageText.setAttribute(
             "title",
             `${remaining} of ${planLimit} refinements remaining today`
           );
-        } catch (_e) {}
+  
+        console.log("[Orbitar Refine] Updated usage count:", remaining, "/", planLimit);
+        } catch (_e) {
+          console.error("[Orbitar Refine] Failed to update usage count:", _e);
+        }
 
-        removeIntegratedPanel();
+        console.log("[Orbitar Refine] === REFINE COMPLETE ===");
+        
+        // Close the panel with smooth animation after setText completes
+        setTimeout(() => {
+          removeIntegratedPanel();
+        }, 200);
       }
     );
   });

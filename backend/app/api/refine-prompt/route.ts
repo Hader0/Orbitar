@@ -15,7 +15,7 @@ const openai = new OpenAI({
 });
 
 const PLAN_LIMITS: Record<string, number> = {
-  free: 10,
+  free: 5,
   builder: 75,
   pro: 500,
 };

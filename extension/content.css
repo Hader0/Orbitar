@@ -574,8 +574,9 @@ clear/* content.css */
   transform: translateY(1px);
 }
 
-/* Suggestion text in labels row */
+/* Suggestion text in labels row - HIDDEN (duplicate removed) */
 .orbitar-suggestion-text {
+  display: none !important; /* Permanently hidden - duplicate of top recommendation pill */
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
   margin-left: auto;
@@ -638,194 +639,130 @@ clear/* content.css */
   display: flex;
   flex-direction: column;
   align-items: center;
-  position: relative;
+  gap: 4px;
 }
 
-/* Usage count text below the Refine button */
+/* Usage count text ABOVE the Refine button */
 .orbitar-usage-text {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
   font-weight: 500;
   white-space: nowrap;
-  position: absolute;
-  top: 100%;
-  margin-top: 2px;
-  left: 50%;
-  transform: translateX(-50%);
+  text-align: center;
 }
 
 /* 
-   Refine Button — Uiverse-like styling (rounded, tactile glass)
-   Inspired by: https://uiverse.io/dexter-st/young-newt-20
-   - Wider pill, stronger outer soft shadow
-   - Pronounced inner softened border, subtle glossy sheen
-   - Slight inset "pressed" effect on active
-   - Adaptive rotating ring remains (light on dark, dark on light)
+   Refine Button — Clean, Modern "Click Me" Design
+   Animated gray/black gradient
 */
 .orbitar-refine-button {
-  padding: 8px 20px;
-  height: 40px;
-  line-height: 1;
-  border-radius: 9999px;
-  /* base translucent glass (adapts visually via backdrop) */
+  padding: 10px 24px;
+  min-width: 90px;
+  border-radius: 12px;
+  
+  /* Animated gray/black gradient */
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(255, 255, 255, 0.03)
+    135deg,
+    #1a1a1a 0%,
+    #2d2d2d 25%,
+    #404040 50%,
+    #2d2d2d 75%,
+    #1a1a1a 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
+  background-size: 200% 200%;
+  animation: gradientMove 3s ease infinite;
+  
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #FFFFFF; /* Pure white text - no opacity */
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
   cursor: pointer;
-  position: relative;
-  overflow: visible;
+  
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  z-index: 2;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1),
-    box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
-  box-shadow: 0 10px 30px rgba(8, 12, 20, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  
+  /* Smooth transitions */
+  transition: border-color 200ms ease;
+  
+  position: relative;
+  overflow: hidden;
+  
+  /* Ensure no opacity or filter dulls the text */
+  opacity: 1 !important;
+  filter: none !important;
 }
 
-/* subtle circular accent behind left icon/text (matches Uiverse feel) */
-.orbitar-refine-button::marker {
-  /* nothing — placeholder in case we add an icon */
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-/* inner glossy sheen */
-.orbitar-refine-button::after {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  z-index: -1;
-  border-radius: 9999px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.03) 30%,
-    rgba(255, 255, 255, 0) 60%,
-    rgba(0, 0, 0, 0.02) 100%
-  );
-  mix-blend-mode: normal;
-  box-shadow: inset 0 1px 12px rgba(255, 255, 255, 0.02),
-    inset 0 -6px 20px rgba(0, 0, 0, 0.18);
-  transition: background 160ms ease, box-shadow 160ms ease;
+/* Hover state - only darken border */
+.orbitar-refine-button:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  animation-play-state: paused; /* Pause animation on hover */
 }
 
-/* rotating border (hidden by default) */
-.orbitar-refine-button::before {
-  content: "";
-  position: absolute;
-  inset: -6px;
-  z-index: -2;
-  border-radius: 9999px;
-  display: none;
+/* Active state - press down */
+.orbitar-refine-button:active {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
-/* busy state shows the ring */
+/* Force text inside button to be pure white with no dulling */
+.orbitar-refine-button span {
+  color: #FFFFFF !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Loading state - show shimmer animation */
+.orbitar-refine-button[aria-busy="true"] {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
 .orbitar-refine-button[aria-busy="true"]::before {
-  display: block;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.9) 18%,
-    rgba(255, 255, 255, 0.35) 35%,
-    transparent 60%
-  );
-  animation: rotateBorder 1.1s linear infinite;
-  filter: blur(0.6px);
-}
-
-/* hover / active */
-.orbitar-refine-button:hover {
-  transform: translateY(-2px) scale(1.01);
-  box-shadow: 0 16px 34px rgba(8, 12, 20, 0.52),
-    inset 0 2px 8px rgba(255, 255, 255, 0.03);
-}
-
-.orbitar-refine-button:active {
-  transform: translateY(0) scale(0.995);
-  box-shadow: 0 8px 18px rgba(8, 12, 20, 0.36),
-    inset 0 -6px 14px rgba(0, 0, 0, 0.22);
+  content: "";
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.02),
-    rgba(0, 0, 0, 0.06)
-  );
-}
-
-/* content above sheen */
-.orbitar-refine-button > * {
-  position: relative;
-  z-index: 2;
-}
-
-/*Hover sheen animation (kept)*/
-.orbitar-refine-button:hover .orbitar-refine-shine {
-  animation: fogDrift 3.6s ease-in-out infinite;
-  opacity: 0.7;
-}
-
-/* Text color for Dark Mode (since inner pill is white) */
-.orbitar-refine-button {
-  color: #000000;
-}
-
-@keyframes rotateBorder {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Light mode overrides */
-html.light .orbitar-refine-button::after,
-body.light .orbitar-refine-button::after {
-  background: #ffffff;
-}
-
-html.light .orbitar-refine-button,
-body.light .orbitar-refine-button {
-  color: #000000;
-}
-
-html.light .orbitar-refine-button::before,
-body.light .orbitar-refine-button::before {
-  background: conic-gradient(
-    from 0deg,
+    90deg,
     transparent 0%,
-    rgba(0, 0, 0, 0.8) 20%,
-    transparent 40%
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
   );
+  animation: shimmer 1.5s infinite;
 }
 
-.orbitar-refine-button:hover {
-  transform: scale(1.02);
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-.orbitar-refine-button:active {
-  transform: scale(0.98);
+/* Light mode adjustments */
+@media (prefers-color-scheme: light) {
+  .orbitar-usage-text {
+    color: rgba(0, 0, 0, 0.6);
+  }
+  
+  /* Refine button uses same dark mode styling */
 }
-
-/* ensure content sits above the sheen */
-.orbitar-refine-button > * {
-  position: relative;
-  z-index: 2;
-}
-
-.orbitar-refine-button:hover .orbitar-refine-shine {
-  animation: fogDrift 4s ease-in-out infinite;
-  opacity: 0.6;
-}
-
 /* Displacement filter helper for refine button (applied when JS injects filter) */
 .orbitar-refine-with-filter {
   will-change: filter;
@@ -931,62 +868,7 @@ body.light .orbitar-refine-button::before {
     color: #000000;
   }
 
-  /* Refine Button - Light Mode Rotating Border */
-  .orbitar-refine-button {
-    background: transparent; /* Handled by pseudo */
-    border: none; /* Remove default border */
-    color: #1a1a1a;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    text-shadow: none;
-    position: relative;
-    z-index: 1;
-    overflow: hidden;
-  }
 
-  /* Rotating border container */
-  .orbitar-refine-button::before {
-    content: "";
-    position: absolute;
-    inset: -2px; /* Border width */
-    z-index: -1;
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      rgba(0, 0, 0, 0.1) 60deg,
-      rgba(0, 0, 0, 0.8) 120deg,
-      rgba(0, 0, 0, 0.1) 180deg,
-      transparent 360deg
-    );
-    animation: rotateBorder 4s linear infinite;
-    border-radius: 9999px;
-  }
-
-  /* Inner mask to create the border effect */
-  .orbitar-refine-button::after {
-    content: "";
-    position: absolute;
-    inset: 1px; /* Inner spacing */
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 1) 0%,
-      rgba(245, 245, 245, 1) 100%
-    );
-    border-radius: 9999px;
-    z-index: -1;
-  }
-
-  .orbitar-refine-button:hover {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-  }
-
-  @keyframes rotateBorder {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   /* Pro Badge - Light Mode */
   .orbitar-plan-pill[data-plan="pro"],
