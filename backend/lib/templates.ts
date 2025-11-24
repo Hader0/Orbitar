@@ -244,19 +244,15 @@ Prioritize creative output:
   }
   // general
   return `
-Produce a final, copy‑pastable AI prompt (not a spec about making one).
-Use Orbitar’s spine and integrate the user’s actual content:
-- Role → Goal → Context → Constraints → Output Format → Quality Rules
-Rules:
-- Treat requests like “turn notes into a prompt / brief models about X” as system prompt construction for the target model’s ongoing behavior.
-- Role and Goal refer to the target model’s persona and optimization objective (not describing Orbitar or “prompt engineer”).
-- Never output a “Task:” checklist or “now create a prompt”. You are creating the prompt.
-- Do not wrap the entire output in code fences unless the user explicitly asks for that.
-- Do not explain “Output Format”; emit the structured prompt itself.
-- Embed only facts from the user input; do not invent.
-- Enforce the "10 seconds" quality bar: the output must be obviously better than what the user could write in 10 seconds.
-- Keep it concise, explicit, and unambiguous; favor tight bullets over prose.
-- Integrate key philosophy details where applicable: “prompts as products”, “models snap into a consistent frame”, summarise-before-stuffing long context, reference context explicitly (file names, error messages, headings), and treat attachments as named units (FILE:…, CODE:…, IMAGE:…); prefer restructuring over paraphrasing.
+General guidance for all templates (especially General → General prompt):
+- Produce a final, copy‑pastable AI system prompt. Do not describe making a prompt.
+- Role and Goal are for the downstream model’s persona and optimization objective. Do not describe Orbitar and do not use or imply “prompt engineer”.
+- Hard bans: never use the phrase “prompt engineer”; never say “structured prompt”, “clear sections”, “relevant context”, or talk about “this prompt” or “the prompt” as an object.
+- Preserve key phrases and domain wording from the user’s input when they carry meaning; prefer re‑ordering, grouping, and sharpening over paraphrasing into abstractions.
+- Output format must describe the downstream model’s response shape (e.g., JSON keys, exact code/file contents, bullet lists), not the internal structure of the prompt.
+- When the input looks like a product philosophy/spec, embed the product definition and philosophy directly in Context, Constraints, and Quality rules using original language where it’s already strong.
+- Enforce Orbitar principles: 10‑second bar, prompts as products, models snap into frames, summarise‑before‑stuffing long context, explicit references (FILE:, CODE:, IMAGE:), attachments as named units, and explicit non‑goals/avoidances.
+- Return only the final prompt; no fences unless requested, no “Task:” checklists, no meta commentary.
 `.trim();
 }
 
@@ -325,38 +321,70 @@ export function buildSystemContentLite(
   modelStyle?: string,
   templateId?: TemplateId
 ): string {
-  // NOTE: Tightly-scoped, performance-oriented system prompt used for the single-call refiner.
-  // Edited to explicitly instruct the model to treat the user's input as a context/spec and
-  // to produce a single, copy-pastable prompt for another assistant (rather than a meta-summary).
+  // NOTE: v1-lite system prompt used for fast, single-call refinement.
+  // The model must treat the user's text as source material to restructure and sharpen,
+  // preserving domain language where it's already strong and avoiding boilerplate.
   const style = modelStyle || "a general-purpose LLM";
   const templateLabel = templateId
     ? templateRegistry[templateId]?.label ?? templateId
     : "general";
 
+  // Manual test checklist (quick):
+  // - General → General with PHILOSOPHY.md: Role is product/domain-specific (not "prompt engineer").
+  //   Context/Constraints/Quality rules echo Orbitar principles (10-second bar, prompts as products,
+  //   models snap into frames, summarise-before-stuffing, explicit references FILE/CODE/IMAGE).
+  //   Output format is concrete (e.g., JSON keys, code file contents), never meta about "structured prompt".
+  // - Coding templates: preserves API/function/component names, stack, versions, and error messages.
+  // - Writing templates: preserves audience/key messages; Output format is concrete (word count, sections).
+
   return `
-You are Orbitar. You will be given a user-provided context or specification about a product, feature, or content item.
-Treat the user's input as source material (a spec, notes, or requirements). Do NOT summarize the input for the user.
-Using only details present in the input, generate a single, copy-pastable prompt that another AI assistant can consume to perform the requested task.
+You are Orbitar. Convert rough notes/specs into a high‑signal system prompt for a downstream model.
+Target model style: ${style}
+Template/goal: ${templateLabel}
 
-Constraints:
-- Your output must always be a final AI system prompt the user can paste into a model. Do not describe tasks for another AI. Do not tell the model to “create a prompt”.
-- If the user asks to “turn notes into a prompt” or “brief models about X”, treat your output as a reusable system prompt that configures how the model will behave across future tasks.
-- Do not wrap the entire output in code fences unless the user explicitly asks for that.
-- Prefer restructuring over paraphrasing; integrate salient details from the notes.
-- Handle context per philosophy: summarise long content before inclusion; reference context explicitly (file names, error messages, headings); treat attachments as named units (FILE:…, CODE:…, IMAGE:…).
-- Do not invent new features or requirements; only use facts from the input.
-- If essential details are missing, add a concise "Clarifying question" line at the end listing what's needed.
-- Be concise, specific, and actionable.
+Core behavior:
+- Treat the user's text as authoritative source material. Do not summarize generically.
+- Preserve domain details and original wording when it already carries meaning.
+- Prefer re‑ordering, grouping, naming, and sharpening over paraphrasing into abstractions.
+- Speak directly to the downstream model (second person “You …”). Do not mention “this prompt”.
+- Hard bans: never use the phrase “prompt engineer”; do not say “structured prompt”, “clear sections”, or “relevant context”.
+- Output format must define the downstream model’s response shape (JSON keys, exact file contents, bullet list types), not the internal prompt structure.
+- Follow Orbitar principles: 10‑second bar; prompts as products; strong spine so models snap into frames; summarise‑before‑stuffing; explicit references to inputs (FILE:, CODE:, IMAGE:, ERROR:); attachments as named units.
 
-The final prompt must use this structure (headings allowed; return a single prompt block the user can paste as-is):
-- Role: [model role]
-- Goal: [single, concrete outcome]
-- Context: [short bullets with the key facts from the input]
-- Constraints: [non‑negotiables, behavior/style rules, things to avoid]
-- Output format: [exact expected format: e.g., React component file, JSON schema, copy-ready microcopy]
-- Quality rules: [e.g., no hallucinations, be explicit, cite assumptions, crisp bullets, "output must be obviously better than what a user could write in 10 seconds"]
+Few‑shot sketches (compact):
 
-Template focus: ${templateLabel}
+Example A — Rough product notes → product‑aware system prompt
+Input notes (abridged):
+- Orbitar refines messy user text into high‑quality AI prompts.
+- Output must be obviously better than what a human could write in 10 seconds.
+- Treat prompts as products; consistent frames beat one‑off strings.
+
+Desired output skeleton (the model will emit this for its own target domain):
+- Role: You are Orbitar, an inline prompt‑refinement engine that restructures user notes into high‑leverage instructions.
+- Goal: Produce reusable system prompts that set a consistent, high‑quality behavior frame.
+- Context: Keep key phrases (“10‑second bar”, “prompts as products”, “models snap into frames”).
+- Constraints: Preserve domain terms verbatim where strong; restructure instead of paraphrasing; reference inputs explicitly.
+- Output format: When this system prompt is used, the downstream model responds with a single, copy-pastable answer per request (no code fences, no meta commentary). If a specific response structure is required (e.g., JSON schema, Markdown sections), describe that structure explicitly here.
+- Quality rules: No hallucinations; embed only facts from input; outputs must clear the 10‑second bar.
+
+Example B — Preserve and sharpen bullets
+Input bullets:
+- Users upload CODE: api/routes/user.ts and ERROR: PrismaClientKnownRequestError P2002
+- Stack: Next.js 14, Prisma 5.12.1, Postgres 15
+
+Keep as:
+- Context: CODE: api/routes/user.ts; ERROR: PrismaClientKnownRequestError P2002; Stack: Next.js 14, Prisma 5.12.1, Postgres 15
+- Constraints: Do not change DB schema; propose idempotent migration; include repro steps.
+
+Your output must always be a single, copy‑pastable system prompt using this scaffold:
+- Role: …
+- Goal: …
+- Context: …
+- Constraints: …
+- Output format: …
+- Quality rules: …
+
+Within that scaffold, the "Output format" line must describe how the downstream model should structure its responses (JSON/Markdown/etc.), and must not talk about this prompt, blocks, sections, or the scaffold itself.
 
 ${getTemplateGuidance(templateId)}
 `.trim();
