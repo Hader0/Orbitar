@@ -638,8 +638,80 @@ clear/* content.css */
 .orbitar-refine-wrapper {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* align the inner row to the right so the keycap sits directly left of the button */
+  align-items: flex-end;
   gap: 4px;
+}
+
+/* Row holding keycap and refine button (keycap sits directly left of the button) */
+.orbitar-refine-row {
+  display: flex;
+  align-items: center;
+  gap: 4px; /* reduced spacing between keycap and button */
+  align-self: flex-end; /* keep the row anchored to the right edge of the wrapper */
+  white-space: nowrap; /* prevent keycap and button from wrapping */
+  flex-wrap: nowrap;
+}
+
+/* Small sunken keycap to the left of the Refine button (vertical layout) */
+.orbitar-keycap {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.36), rgba(0, 0, 0, 0.5));
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 1px 0 rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transform: none; /* vertical flow handles placement */
+
+  /* ensure the keycap sits immediately left of the button with reduced spacing */
+  margin-right: 4px;
+
+  /* Vertical presentation */
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  -webkit-writing-mode: vertical-rl;
+  -webkit-text-orientation: upright;
+
+  /* slightly narrower visual footprint for vertical mode */
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* Make keycap more subtle in light mode */
+@media (prefers-color-scheme: light) {
+  .orbitar-keycap {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(250, 250, 250, 0.85)
+    );
+    color: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+}
+
+/* Incognito toggle: smaller, muted, and less intrusive to avoid layout shifts */
+.orbitar-incognito-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.orbitar-incognito-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: #6b7280;
 }
 
 /* Usage count text ABOVE the Refine button */
@@ -659,7 +731,7 @@ clear/* content.css */
   padding: 10px 24px;
   min-width: 90px;
   border-radius: 12px;
-  
+
   /* Animated gray/black gradient */
   background: linear-gradient(
     135deg,
@@ -671,24 +743,24 @@ clear/* content.css */
   );
   background-size: 200% 200%;
   animation: gradientMove 3s ease infinite;
-  
+
   border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #FFFFFF; /* Pure white text - no opacity */
+  color: #ffffff; /* Pure white text - no opacity */
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.3px;
   cursor: pointer;
-  
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  
+
   /* Smooth transitions */
   transition: border-color 200ms ease;
-  
+
   position: relative;
   overflow: hidden;
-  
+
   /* Ensure no opacity or filter dulls the text */
   opacity: 1 !important;
   filter: none !important;
@@ -719,7 +791,7 @@ clear/* content.css */
 
 /* Force text inside button to be pure white with no dulling */
 .orbitar-refine-button span {
-  color: #FFFFFF !important;
+  color: #ffffff !important;
   opacity: 1 !important;
   filter: none !important;
   -webkit-font-smoothing: antialiased;
@@ -730,20 +802,54 @@ clear/* content.css */
 .orbitar-refine-button[aria-busy="true"] {
   position: relative;
   pointer-events: none;
-  opacity: 0.8;
+  /* Matte, solid style while loading (no shimmer/gradient motion) */
+  opacity: 1;
+  animation: none;
+  background: #1f1f1f; /* matte */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
+/* Disable overlay shimmer when loading to keep matte look */
 .orbitar-refine-button[aria-busy="true"]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    transparent 100%
-  );
-  animation: shimmer 1.5s infinite;
+  content: none;
+}
+
+/* Hover state - only darken border */
+.orbitar-refine-button:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  animation-play-state: paused; /* Pause animation on hover */
+}
+
+/* Active state - press down */
+.orbitar-refine-button:active {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Force text inside button to be pure white with no dulling */
+.orbitar-refine-button span {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Loading state - show shimmer animation */
+.orbitar-refine-button[aria-busy="true"] {
+  position: relative;
+  pointer-events: none;
+  /* Matte, solid style while loading (no shimmer/gradient motion) */
+  opacity: 1;
+  animation: none;
+  background: #1f1f1f; /* matte */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Disable overlay shimmer when loading to keep matte look */
+.orbitar-refine-button[aria-busy="true"]::before {
+  content: none;
 }
 
 @keyframes shimmer {
@@ -760,7 +866,7 @@ clear/* content.css */
   .orbitar-usage-text {
     color: rgba(0, 0, 0, 0.6);
   }
-  
+
   /* Refine button uses same dark mode styling */
 }
 /* Displacement filter helper for refine button (applied when JS injects filter) */
@@ -867,8 +973,6 @@ clear/* content.css */
     background: #e5e7eb;
     color: #000000;
   }
-
-
 
   /* Pro Badge - Light Mode */
   .orbitar-plan-pill[data-plan="pro"],

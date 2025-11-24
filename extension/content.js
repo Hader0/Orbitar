@@ -157,6 +157,7 @@ const ORBITAR_TEMPLATE_GROUPS = {
 
 const ORBITAR_DEFAULT_CATEGORY = "general";
 const ORBITAR_DEFAULT_TEMPLATE_ID = "general_general";
+let ORBITAR_ALLOWED_TEMPLATES = null;
 
 /* --- UI Creation Helpers --- */
 
@@ -239,9 +240,12 @@ function createPanel() {
       <div class="orbitar-chatgpt-right">
         <div class="orbitar-refine-wrapper">
           <span class="orbitar-usage-text" id="orbitar-usage-text"></span>
-          <button class="orbitar-refine-button" id="refine-btn">
-             <span>Refine</span>
-          </button>
+          <div class="orbitar-refine-row">
+            <span class="orbitar-keycap" id="orbitar-shortcut" title="Keyboard shortcut">Ctrl + ⏎</span>
+            <button class="orbitar-refine-button" id="refine-btn">
+               <span>Refine</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -375,7 +379,8 @@ function showIntegratedPanel() {
   }
   function populateCategoryOptions() {
     categorySelect.innerHTML = "";
-    Object.keys(ORBITAR_TEMPLATE_GROUPS).forEach((cat) => {
+    const GROUPS = ORBITAR_ALLOWED_TEMPLATES || ORBITAR_TEMPLATE_GROUPS;
+    Object.keys(GROUPS).forEach((cat) => {
       const opt = document.createElement("option");
       opt.value = cat;
       opt.textContent = niceCategoryLabel(cat);
@@ -384,7 +389,8 @@ function showIntegratedPanel() {
   }
   function populateTemplateOptions(cat) {
     templateSelect.innerHTML = "";
-    const arr = ORBITAR_TEMPLATE_GROUPS[cat] || [];
+    const GROUPS = ORBITAR_ALLOWED_TEMPLATES || ORBITAR_TEMPLATE_GROUPS;
+    const arr = GROUPS[cat] || [];
     arr.forEach((tpl) => {
       const opt = document.createElement("option");
       opt.value = tpl.value;
@@ -397,8 +403,14 @@ function showIntegratedPanel() {
   let userChangedTemplate = false;
 
   populateCategoryOptions();
-  categorySelect.value = ORBITAR_DEFAULT_CATEGORY;
-  populateTemplateOptions(ORBITAR_DEFAULT_CATEGORY);
+  // try to use General if present, otherwise first category
+  const GROUPS_INIT = ORBITAR_ALLOWED_TEMPLATES || ORBITAR_TEMPLATE_GROUPS;
+  const categories = Object.keys(GROUPS_INIT);
+  const initialCat = categories.includes(ORBITAR_DEFAULT_CATEGORY)
+    ? ORBITAR_DEFAULT_CATEGORY
+    : categories[0] || ORBITAR_DEFAULT_CATEGORY;
+  categorySelect.value = initialCat;
+  populateTemplateOptions(initialCat);
   templateSelect.value = ORBITAR_DEFAULT_TEMPLATE_ID;
 
   // Initialize visible values
@@ -461,10 +473,11 @@ function showIntegratedPanel() {
         if (!resp || resp.error) return;
         if (userChangedCategory || userChangedTemplate) return;
         const { templateId, category } = resp;
-        if (category && ORBITAR_TEMPLATE_GROUPS[category]) {
+        const GROUPS = ORBITAR_ALLOWED_TEMPLATES || ORBITAR_TEMPLATE_GROUPS;
+        if (category && GROUPS[category]) {
           categorySelect.value = category;
           populateTemplateOptions(category);
-          const group = ORBITAR_TEMPLATE_GROUPS[category];
+          const group = GROUPS[category];
           if (group.some((g) => g.value === templateId)) {
             templateSelect.value = templateId;
             try {
@@ -576,11 +589,74 @@ function showIntegratedPanel() {
     }
   }, 250);
 
+  // Fetch allowed templates for this user (plan + preferences)
+  sendMessageSafe({ type: "GET_TEMPLATES" }, (resp) => {
+    if (resp && Array.isArray(resp.templates)) {
+      try {
+        const grouped = {};
+        for (const t of resp.templates) {
+          if (!grouped[t.category]) grouped[t.category] = [];
+          grouped[t.category].push({ value: t.id, label: t.label });
+        }
+        ORBITAR_ALLOWED_TEMPLATES = grouped;
+        // Re-populate selects using allowed templates
+        populateCategoryOptions();
+        const groups = ORBITAR_ALLOWED_TEMPLATES;
+        const cats = Object.keys(groups);
+        const cat0 =
+          cats.includes(ORBITAR_DEFAULT_CATEGORY) &&
+          groups[ORBITAR_DEFAULT_CATEGORY]?.length
+            ? ORBITAR_DEFAULT_CATEGORY
+            : cats[0] || ORBITAR_DEFAULT_CATEGORY;
+        categorySelect.value = cat0;
+        populateTemplateOptions(cat0);
+        const tpl0 =
+          (groups[cat0] && groups[cat0][0] && groups[cat0][0].value) ||
+          ORBITAR_DEFAULT_TEMPLATE_ID;
+        templateSelect.value = tpl0;
+
+        // sync pill labels
+        try {
+          categoryValueEl.textContent =
+            categorySelect.options[categorySelect.selectedIndex]?.textContent ||
+            cat0;
+          templateValueEl.textContent =
+            templateSelect.options[templateSelect.selectedIndex]?.textContent ||
+            tpl0;
+        } catch (_e) {}
+      } catch (e) {
+        console.warn("[Orbitar] failed to apply allowed templates", e);
+      }
+    }
+  });
+
+  // Keyboard shortcut: Shift + Enter triggers refine (without double-submitting)
+  try {
+    if (
+      integratedComposer &&
+      typeof integratedComposer.addEventListener === "function"
+    ) {
+      integratedComposer.addEventListener("keydown", (e) => {
+        try {
+          const isEnter = e.key === "Enter" || e.keyCode === 13;
+          if (isEnter && e.ctrlKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Trigger the same flow as clicking the Refine button
+            if (!refineBtn.disabled) {
+              refineBtn.click();
+            }
+          }
+        } catch (_e) {}
+      });
+    }
+  } catch (_e) {}
+
   refineBtn.addEventListener("click", () => {
     console.log("[Orbitar Refine] === REFINE BUTTON CLICKED ===");
     console.log("[Orbitar Refine] integratedComposer:", integratedComposer);
     console.log("[Orbitar Refine] activeAdapter:", activeAdapter);
-    
+
     // Robustly obtain text: prefer adapter, fall back to focused element and global selectors
     let text = "";
     try {
@@ -603,7 +679,10 @@ function showIntegratedPanel() {
           console.log("[Orbitar Refine] Got text from focused textarea:", text);
         } else if (a.isContentEditable) {
           text = a.innerText || a.textContent || "";
-          console.log("[Orbitar Refine] Got text from focused contenteditable:", text);
+          console.log(
+            "[Orbitar Refine] Got text from focused contenteditable:",
+            text
+          );
         }
       } catch (_e) {
         console.error("[Orbitar Refine] Focused element fallback failed:", _e);
@@ -622,14 +701,19 @@ function showIntegratedPanel() {
           document.querySelector('div[contenteditable="true"]') ||
           document.querySelector('[role="textbox"]');
         if (globalEl) {
-          console.log("[Orbitar Refine] Found global element:", globalEl.tagName);
+          console.log(
+            "[Orbitar Refine] Found global element:",
+            globalEl.tagName
+          );
           // If we found a global editable, prefer using its parent composer if possible
           try {
             if (activeAdapter && activeAdapter.findComposer) {
               const candidateComposer = activeAdapter.findComposer(globalEl);
               if (candidateComposer) {
                 integratedComposer = candidateComposer;
-                console.log("[Orbitar Refine] Updated integratedComposer from global element");
+                console.log(
+                  "[Orbitar Refine] Updated integratedComposer from global element"
+                );
               }
             }
           } catch (_e) {
@@ -670,6 +754,12 @@ function showIntegratedPanel() {
     refineBtn.disabled = true;
     refineBtn.setAttribute("aria-busy", "true");
     errorMsg.textContent = "";
+    // Plan badge ink animation: add refining class
+    try {
+      const pill = planBadge && planBadge.parentElement;
+      if (pill) pill.classList.add("refining");
+    } catch (_e) {}
+
     refineBtn.innerHTML = `
            <span style="display:inline-flex; align-items:center; gap:8px;">
              <svg width="16" height="16" viewBox="0 0 50 50" aria-label="Loading">
@@ -691,16 +781,28 @@ function showIntegratedPanel() {
       (response) => {
         console.log("[Orbitar Refine] === API RESPONSE RECEIVED ===");
         console.log("[Orbitar Refine] Response:", response);
-        console.log("[Orbitar Refine] Chrome runtime error:", chrome.runtime.lastError);
-        
+        console.log(
+          "[Orbitar Refine] Chrome runtime error:",
+          chrome.runtime.lastError
+        );
+
         const original = refineBtn.getAttribute("data-prev-html");
         if (original) refineBtn.innerHTML = original;
         refineBtn.disabled = false;
         refineBtn.setAttribute("aria-busy", "false");
         console.log("[Orbitar Refine] Restored button state");
 
+        // Remove plan badge refining animation
+        try {
+          const pill = planBadge && planBadge.parentElement;
+          if (pill) pill.classList.remove("refining");
+        } catch (_e) {}
+
         if (!response || response.error || chrome.runtime.lastError) {
-          const errorText = response?.error || chrome.runtime.lastError?.message || "Orbitar: backend unreachable. Is dev server running?";
+          const errorText =
+            response?.error ||
+            chrome.runtime.lastError?.message ||
+            "Orbitar: backend unreachable. Is dev server running?";
           console.error("[Orbitar Refine] ERROR:", errorText);
           errorMsg.textContent = errorText;
           return;
@@ -711,36 +813,47 @@ function showIntegratedPanel() {
         console.log("[Orbitar Refine] Refined text:", refined);
         console.log("[Orbitar Refine] Refined text length:", refined.length);
         console.log("[Orbitar Refine] Original text:", text);
-        
+
         if ((refined || "").trim() === (text || "").trim()) {
-          console.warn("[Orbitar Refine] No changes suggested (text is the same)");
+          console.warn(
+            "[Orbitar Refine] No changes suggested (text is the same)"
+          );
           errorMsg.textContent = "No changes suggested.";
           return;
         }
 
         console.log("[Orbitar Refine] Calling setText...");
         console.log("[Orbitar Refine] Composer to use:", integratedComposer);
-        const setTextResult = activeAdapter.setText(integratedComposer, refined);
+        const setTextResult = activeAdapter.setText(
+          integratedComposer,
+          refined
+        );
         console.log("[Orbitar Refine] setText returned:", setTextResult);
 
         // Update local usage counters so the UI shows remaining / total and counts down
         try {
           usedCount = (typeof usedCount === "number" ? usedCount : 0) + 1;
           const remaining = Math.max(0, planLimit - usedCount);
-          const suffix = (planBadge.getAttribute('data-plan') === "free") ? " left today" : "";
+          const suffix =
+            planBadge.getAttribute("data-plan") === "free" ? " left today" : "";
           usageText.textContent = `${remaining} / ${planLimit}${suffix}`;
           usageText.setAttribute(
             "title",
             `${remaining} of ${planLimit} refinements remaining today`
           );
-  
-        console.log("[Orbitar Refine] Updated usage count:", remaining, "/", planLimit);
+
+          console.log(
+            "[Orbitar Refine] Updated usage count:",
+            remaining,
+            "/",
+            planLimit
+          );
         } catch (_e) {
           console.error("[Orbitar Refine] Failed to update usage count:", _e);
         }
 
         console.log("[Orbitar Refine] === REFINE COMPLETE ===");
-        
+
         // Close the panel with smooth animation after setText completes
         setTimeout(() => {
           removeIntegratedPanel();

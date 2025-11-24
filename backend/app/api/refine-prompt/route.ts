@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
   TemplateId,
-  buildSystemContent as buildSystemContentNew,
+  buildSystemContentLite,
   classifyTemplate,
   templateRegistry,
   isTemplateId,
@@ -21,6 +21,36 @@ const PLAN_LIMITS: Record<string, number> = {
 };
 
 const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
+const MAX_INPUT_CHARS = 8000;
+const MAX_OUTPUT_TOKENS = 384;
+
+/**
+ * Debug flag — enable by setting DEBUG=true in backend/.env for verbose logs.
+ */
+const DEBUG = process.env.DEBUG === "true";
+
+function mapCategoryToDefaultTemplateId(cat?: string): TemplateId | null {
+  if (!cat) return null;
+  const c = cat.toLowerCase();
+  switch (c) {
+    case "coding":
+      return "coding_feature";
+    case "writing":
+      return "writing_blog";
+    case "research":
+      return "research_summarize";
+    case "planning":
+      return "planning_feature_spec";
+    case "communication":
+      return "communication_reply";
+    case "creative":
+      return "creative_brainstorm";
+    case "general":
+      return "general_general";
+    default:
+      return null;
+  }
+}
 
 function jsonCors(body: any, status = 200) {
   return NextResponse.json(body, {
@@ -137,7 +167,10 @@ ${getTemplateGuidance(template)}
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return jsonCors({ error: "Missing or invalid token" }, 401);
+    return jsonCors(
+      { error: "AUTH_ERROR", message: "Missing or invalid token" },
+      401
+    );
   }
 
   const token = authHeader.split(" ")[1];
@@ -152,7 +185,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!apiKey) {
-    return jsonCors({ error: "Invalid API key" }, 401);
+    return jsonCors({ error: "AUTH_ERROR", message: "Invalid API key" }, 401);
   }
 
   const user = apiKey.user;
@@ -176,40 +209,63 @@ export async function POST(req: NextRequest) {
 
   const limit = PLAN_LIMITS[user.plan] || 10;
   if (user.dailyUsageCount >= limit) {
-    return jsonCors({ error: "Daily limit reached" }, 429);
+    return jsonCors(
+      { error: "RATE_LIMIT", message: "Daily limit reached" },
+      429
+    );
   }
 
   // 3. Process Request
+  // effectiveIncognito holds the runtime incognito flag:
+  // - If the request includes a boolean `incognito` it will override the user's default.
+  // - Otherwise it mirrors user.defaultIncognito, defaulting to false.
+  let effectiveIncognito: boolean = (user as any)?.defaultIncognito ?? false;
   try {
     const {
       text,
       modelStyle,
       templateId: templateIdRaw,
-      category: _categoryRaw,
+      category: categoryRaw,
       template,
+      incognito: incognitoRaw,
+      source,
     } = await req.json();
 
     if (!text) {
-      return jsonCors({ error: "Text is required" }, 400);
+      return jsonCors(
+        { error: "BAD_REQUEST", message: "Text is required" },
+        400
+      );
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      console.error("OpenAI API key not configured.");
-      return jsonCors({ error: "OpenAI API key not configured." }, 500);
+      console.error("Backend not configured: missing OPENAI_API_KEY.");
+      return jsonCors(
+        {
+          error: "BACKEND_NOT_CONFIGURED",
+          message: "Backend not configured: missing OPENAI_API_KEY.",
+        },
+        500
+      );
     }
 
-    // Resolve TemplateId (prefer explicit templateId, else map legacy "template", else classify)
+    // Resolve TemplateId (prefer explicit templateId, else map category, else map legacy "template", else classify heuristically)
     let templateId: TemplateId | undefined;
     if (typeof templateIdRaw === "string" && isTemplateId(templateIdRaw)) {
-      templateId = templateIdRaw;
-    } else if (typeof template === "string") {
-      // Legacy mapping for backward compatibility
-      const t = template.toLowerCase();
-      if (t === "coding") templateId = "coding_feature";
-      else if (t === "blog" || t === "writing") templateId = "writing_blog";
-      else if (t === "summarize" || t === "summary")
-        templateId = "research_summarize";
-      else templateId = "general_general";
+      templateId = templateIdRaw as TemplateId;
+    } else {
+      const fromCategory = mapCategoryToDefaultTemplateId(categoryRaw);
+      if (fromCategory) {
+        templateId = fromCategory;
+      } else if (typeof template === "string") {
+        // Legacy mapping for backward compatibility
+        const t = template.toLowerCase();
+        if (t === "coding") templateId = "coding_feature";
+        else if (t === "blog" || t === "writing") templateId = "writing_blog";
+        else if (t === "summarize" || t === "summary")
+          templateId = "research_summarize";
+        else templateId = "general_general";
+      }
     }
     if (!templateId) {
       const cls = await classifyTemplate(text);
@@ -218,47 +274,190 @@ export async function POST(req: NextRequest) {
     const categoryUsed = templateRegistry[templateId].category;
 
     // Build richer system content and messages (keep contract unchanged)
-    const systemContent = buildSystemContentNew(modelStyle, templateId);
+    const systemContent = buildSystemContentLite(modelStyle, templateId);
+    const textToSend =
+      typeof text === "string"
+        ? text.length > MAX_INPUT_CHARS
+          ? text.slice(-MAX_INPUT_CHARS)
+          : text
+        : "";
     const messages: ChatCompletionMessageParam[] = [
       { role: "system", content: systemContent },
-      { role: "user", content: text },
+      { role: "user", content: textToSend },
     ];
 
     // Try official SDK first; fall back to direct fetch if unavailable/fails
+    const start = Date.now();
     let refinedText: string | undefined;
-    try {
-      const completion = await openai.chat.completions.create({
-        model: DEFAULT_MODEL,
-        messages,
-      });
-      refinedText = completion.choices[0]?.message?.content || undefined;
-    } catch (sdkErr) {
-      console.warn(
-        "OpenAI SDK call failed, attempting fetch fallback...",
-        sdkErr
-      );
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: DEFAULT_MODEL,
+    let inputTokens: number | null = null;
+    let outputTokens: number | null = null;
+    // Try the SDK with a small prioritized model list first to handle accounts
+    // where the preferred model (e.g. gpt-5-mini) isn't available.
+    let sdkErr: any = null;
+    const MODEL_PRIORITY = [
+      ...(process.env.OPENAI_MODEL ? [process.env.OPENAI_MODEL] : []),
+      "gpt-5-mini",
+      "gpt-4o-mini",
+      "gpt-3.5-turbo",
+    ].filter(Boolean) as string[];
+
+    let sdkSucceeded = false;
+    for (const m of MODEL_PRIORITY) {
+      try {
+        if (DEBUG) {
+          console.debug("Attempting OpenAI SDK call with model", m);
+        }
+        const completion = await openai.chat.completions.create({
+          model: m,
           messages,
-        }),
+          temperature: 0.2,
+          max_tokens: MAX_OUTPUT_TOKENS,
+        });
+        refinedText = completion.choices[0]?.message?.content || undefined;
+        inputTokens = (completion as any)?.usage?.prompt_tokens ?? null;
+        outputTokens = (completion as any)?.usage?.completion_tokens ?? null;
+        // record which model succeeded (we'll use DEFAULT_MODEL later for logging)
+        if (DEBUG) {
+          console.debug("OpenAI SDK call succeeded with model", m);
+        }
+        sdkSucceeded = true;
+        break;
+      } catch (err) {
+        sdkErr = err;
+        if (DEBUG) {
+          console.warn("OpenAI SDK model attempt failed:", m, err);
+        }
+        // try next model
+        continue;
+      }
+    }
+
+    if (!sdkSucceeded) {
+      console.warn("OpenAI SDK calls failed for all prioritized models.", {
+        modelsTried: MODEL_PRIORITY,
+        lastError: sdkErr,
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        refinedText = data?.choices?.[0]?.message?.content ?? undefined;
-      } else {
-        const errText = await resp.text().catch(() => "");
-        console.error("OpenAI fetch fallback failed:", resp.status, errText);
-        throw new Error("OpenAI request failed");
+
+      // Try the REST endpoint with the same model priority list so we don't hard-fail on DEFAULT_MODEL
+      let restSucceeded = false;
+      for (const m of MODEL_PRIORITY) {
+        try {
+          if (DEBUG) {
+            console.debug("Attempting OpenAI REST call with model", m);
+          }
+          const r = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: m,
+              messages,
+              temperature: 0.2,
+              max_tokens: MAX_OUTPUT_TOKENS,
+            }),
+          });
+
+          if (r.ok) {
+            const d = await r.json();
+            refinedText = d?.choices?.[0]?.message?.content ?? undefined;
+            inputTokens = d?.usage?.prompt_tokens ?? null;
+            outputTokens = d?.usage?.completion_tokens ?? null;
+
+            // log success with this model
+            try {
+              await (prisma as any).promptEvent.create({
+                data: {
+                  userId: user.id,
+                  plan: user.plan,
+                  source: typeof source === "string" ? source : null,
+                  category: categoryUsed,
+                  templateId: templateId,
+                  model: m,
+                  modelStyle: modelStyle || null,
+                  latencyMs: Date.now() - start,
+                  status: "success_rest_fallback",
+                  inputTokens,
+                  outputTokens,
+                  incognito: effectiveIncognito,
+                },
+              });
+            } catch (logErr) {
+              console.error(
+                "PromptEvent log error (rest fallback success):",
+                logErr
+              );
+            }
+
+            restSucceeded = true;
+            break;
+          } else {
+            const bodyText = await r.text().catch(() => "");
+            if (DEBUG) {
+              console.debug("OpenAI REST attempt failed", {
+                model: m,
+                status: r.status,
+                bodyText,
+              });
+            }
+            // continue to next model
+            continue;
+          }
+        } catch (err) {
+          if (DEBUG)
+            console.warn("OpenAI REST attempt error for model", m, err);
+          continue;
+        }
+      }
+
+      if (!restSucceeded) {
+        // All REST attempts failed — treat as upstream error
+        console.error(
+          "All OpenAI REST attempts failed for models:",
+          MODEL_PRIORITY
+        );
+        return jsonCors(
+          {
+            error: "OPENAI_ERROR",
+            message:
+              "OpenAI rejected the request. Check model name and parameters.",
+            upstreamStatus: null,
+          },
+          502
+        );
       }
     }
 
     refinedText = refinedText || text;
+    const latencyMs = Date.now() - start;
+    // Update effectiveIncognito based on request-level flag.
+    // Request-level boolean overrides the user's default; otherwise keep the user's default (or false).
+    if (typeof incognitoRaw === "boolean") {
+      effectiveIncognito = incognitoRaw;
+    }
+
+    // Log PromptEvent (non-blocking)
+    try {
+      await (prisma as any).promptEvent.create({
+        data: {
+          userId: user.id,
+          plan: user.plan,
+          source: typeof source === "string" ? source : null,
+          category: categoryUsed,
+          templateId: templateId,
+          model: DEFAULT_MODEL,
+          modelStyle: modelStyle || null,
+          latencyMs,
+          status: "success",
+          inputTokens: inputTokens,
+          outputTokens: outputTokens,
+          incognito: effectiveIncognito,
+        },
+      });
+    } catch (logErr) {
+      console.error("PromptEvent log error:", logErr);
+    }
 
     // Increment usage only on successful completion
     await prisma.user.update({
@@ -272,6 +471,36 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("Refine error:", error);
-    return jsonCors({ error: "Internal server error" }, 500);
+    // Attempt to log failure (non-blocking)
+    try {
+      const data: any = {
+        plan: null,
+        source: null,
+        category: null,
+        templateId: null,
+        model: DEFAULT_MODEL,
+        modelStyle: null,
+        latencyMs: null,
+        status: "error_internal",
+        inputTokens: null,
+        outputTokens: null,
+        incognito: null,
+      };
+      // user is available in outer scope after token validation
+      // only set userId if present to avoid Prisma complaining about undefined
+      if (typeof user?.id === "string") data.userId = user.id;
+      // ensure error-path events also record the effective incognito flag
+      data.incognito = effectiveIncognito;
+      await (prisma as any).promptEvent.create({ data });
+    } catch (logErr) {
+      console.error("PromptEvent log error (failure path):", logErr);
+    }
+    return jsonCors(
+      {
+        error: "INTERNAL_ERROR",
+        message: "Unexpected error. Please try again.",
+      },
+      500
+    );
   }
 }

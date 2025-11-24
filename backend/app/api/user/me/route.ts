@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     }
 
     const PLAN_LIMITS: Record<string, number> = {
-      free: 10,
+      free: 5,
       builder: 75,
       pro: 500,
     };
@@ -57,15 +57,21 @@ export async function GET(req: NextRequest) {
     const limit = PLAN_LIMITS[apiKey.user.plan] || 10;
     const now = new Date();
     const resetTime = new Date(apiKey.user.dailyUsageResetAt);
-    
+
     // Return usage count (reset if needed on client side)
     const dailyUsageCount = now > resetTime ? 0 : apiKey.user.dailyUsageCount;
 
-    return jsonCors({ 
-      plan: apiKey.user.plan,
-      dailyUsageCount,
-      limit
-    }, 200);
+    return jsonCors(
+      {
+        plan: apiKey.user.plan,
+        dailyUsageCount,
+        limit,
+        // expose privacy flags for potential frontend use
+        allowDataUse: (apiKey.user as any).allowDataUse ?? false,
+        defaultIncognito: (apiKey.user as any).defaultIncognito ?? false,
+      },
+      200
+    );
   } catch (error) {
     console.error("User info error:", error);
     return jsonCors({ error: "Internal server error" }, 500);

@@ -24,6 +24,12 @@ model User {
   stripeSubscriptionId String?
   stripeSubscriptionStatus String?
 
+  allowDataUse      Boolean   @default(false)
+  defaultIncognito  Boolean   @default(false)
+
+  promptEvents      PromptEvent[]
+  templatePreferences UserTemplatePreference[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -71,4 +77,34 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PromptEvent {
+  id           String    @id @default(cuid())
+  createdAt    DateTime  @default(now())
+
+  user         User?     @relation(fields: [userId], references: [id])
+  userId       String?
+
+  plan         String?   // e.g. "free", "light", "pro"
+  source       String?   // "chatgpt", "notion", etc.
+  category     String?
+  templateId   String?
+  model        String?
+  modelStyle   String?   // "fast", "precise", etc.
+  latencyMs    Int?
+  status       String?   // "success", "error_<type>"
+  inputTokens  Int?
+  outputTokens Int?
+  incognito    Boolean?  // whether this refine was incognito
+}
+
+model UserTemplatePreference {
+  id         String @id @default(cuid())
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  templateId String
+  enabled    Boolean @default(true)
+
+  @@unique([userId, templateId])
 }

@@ -9,6 +9,8 @@ export type TemplateCategory =
   | "creative"
   | "general";
 
+export type PlanName = "free" | "builder" | "pro";
+
 export type TemplateId =
   | "coding_feature"
   | "coding_debug"
@@ -34,33 +36,44 @@ export type TemplateId =
 
 export const templateRegistry: Record<
   TemplateId,
-  { category: TemplateCategory; label: string; description: string }
+  {
+    category: TemplateCategory;
+    label: string;
+    description: string;
+    status?: "ga" | "beta" | "experimental";
+    minPlan: PlanName;
+  }
 > = {
   // coding
   coding_feature: {
     category: "coding",
     label: "Implement feature",
     description: "Help implement a new feature or component",
+    minPlan: "free",
   },
   coding_debug: {
     category: "coding",
     label: "Debug / fix bug",
     description: "Diagnose and fix defects",
+    minPlan: "free",
   },
   coding_refactor: {
     category: "coding",
     label: "Refactor / improve",
     description: "Refactor for readability, performance, or maintainability",
+    minPlan: "builder",
   },
   coding_tests: {
     category: "coding",
     label: "Write tests",
     description: "Create unit/integration tests",
+    minPlan: "builder",
   },
   coding_explain: {
     category: "coding",
     label: "Explain code",
     description: "Explain what code does and why",
+    minPlan: "free",
   },
 
   // writing
@@ -68,26 +81,31 @@ export const templateRegistry: Record<
     category: "writing",
     label: "Blog post",
     description: "Draft a blog post with outline-first approach",
+    minPlan: "free",
   },
   writing_twitter_thread: {
     category: "writing",
     label: "Twitter/X thread",
     description: "Compose a concise thread",
+    minPlan: "free",
   },
   writing_linkedin_post: {
     category: "writing",
     label: "LinkedIn post",
     description: "Professional short-form writing",
+    minPlan: "free",
   },
   writing_email: {
     category: "writing",
     label: "Email",
     description: "Draft a clear email with purpose and tone",
+    minPlan: "free",
   },
   writing_landing_page: {
     category: "writing",
     label: "Landing page copy",
     description: "Persuasive page content with structure",
+    minPlan: "builder",
   },
 
   // research
@@ -95,16 +113,19 @@ export const templateRegistry: Record<
     category: "research",
     label: "Summarize",
     description: "Structured summaries for skimmability",
+    minPlan: "free",
   },
   research_compare: {
     category: "research",
     label: "Compare options",
     description: "Pros/cons comparison and recommendation",
+    minPlan: "builder",
   },
   research_extract_points: {
     category: "research",
     label: "Extract key points",
     description: "Pull out bullets, facts, and action items",
+    minPlan: "free",
   },
 
   // planning
@@ -112,16 +133,19 @@ export const templateRegistry: Record<
     category: "planning",
     label: "Roadmap / plan",
     description: "Milestones, scope, risks, dependencies",
+    minPlan: "free",
   },
   planning_feature_spec: {
     category: "planning",
     label: "Feature spec",
     description: "Structured specification for a feature",
+    minPlan: "builder",
   },
   planning_meeting_notes: {
     category: "planning",
     label: "Meeting notes",
     description: "Action items, owners, blockers, follow-ups",
+    minPlan: "free",
   },
 
   // communication
@@ -129,11 +153,13 @@ export const templateRegistry: Record<
     category: "communication",
     label: "Reply",
     description: "Draft a response with desired tone",
+    minPlan: "free",
   },
   communication_tone_adjust: {
     category: "communication",
     label: "Adjust tone",
     description: "Rewrite keeping content, change tone",
+    minPlan: "free",
   },
 
   // creative
@@ -141,11 +167,13 @@ export const templateRegistry: Record<
     category: "creative",
     label: "Story / scene",
     description: "Narrative generation with constraints",
+    minPlan: "free",
   },
   creative_brainstorm: {
     category: "creative",
     label: "Brainstorm ideas",
     description: "Divergent idea generation",
+    minPlan: "free",
   },
 
   // general
@@ -153,6 +181,7 @@ export const templateRegistry: Record<
     category: "general",
     label: "General prompt",
     description: "Default general-purpose prompting",
+    minPlan: "free",
   },
 };
 
@@ -215,9 +244,19 @@ Prioritize creative output:
   }
   // general
   return `
-Prioritize clarity and structure:
-- Make the task explicit and step-by-step.
-- Make the expected output format unambiguous.
+Produce a final, copy‑pastable AI prompt (not a spec about making one).
+Use Orbitar’s spine and integrate the user’s actual content:
+- Role → Goal → Context → Constraints → Output Format → Quality Rules
+Rules:
+- Treat requests like “turn notes into a prompt / brief models about X” as system prompt construction for the target model’s ongoing behavior.
+- Role and Goal refer to the target model’s persona and optimization objective (not describing Orbitar or “prompt engineer”).
+- Never output a “Task:” checklist or “now create a prompt”. You are creating the prompt.
+- Do not wrap the entire output in code fences unless the user explicitly asks for that.
+- Do not explain “Output Format”; emit the structured prompt itself.
+- Embed only facts from the user input; do not invent.
+- Enforce the "10 seconds" quality bar: the output must be obviously better than what the user could write in 10 seconds.
+- Keep it concise, explicit, and unambiguous; favor tight bullets over prose.
+- Integrate key philosophy details where applicable: “prompts as products”, “models snap into a consistent frame”, summarise-before-stuffing long context, reference context explicitly (file names, error messages, headings), and treat attachments as named units (FILE:…, CODE:…, IMAGE:…); prefer restructuring over paraphrasing.
 `.trim();
 }
 
@@ -279,19 +318,58 @@ ${getTemplateGuidance(templateId)}
 `.trim();
 }
 
+/**
+ * v1-lite prompt (short, fast). Encodes role, goal, context, task, output format.
+ */
+export function buildSystemContentLite(
+  modelStyle?: string,
+  templateId?: TemplateId
+): string {
+  // NOTE: Tightly-scoped, performance-oriented system prompt used for the single-call refiner.
+  // Edited to explicitly instruct the model to treat the user's input as a context/spec and
+  // to produce a single, copy-pastable prompt for another assistant (rather than a meta-summary).
+  const style = modelStyle || "a general-purpose LLM";
+  const templateLabel = templateId
+    ? templateRegistry[templateId]?.label ?? templateId
+    : "general";
+
+  return `
+You are Orbitar. You will be given a user-provided context or specification about a product, feature, or content item.
+Treat the user's input as source material (a spec, notes, or requirements). Do NOT summarize the input for the user.
+Using only details present in the input, generate a single, copy-pastable prompt that another AI assistant can consume to perform the requested task.
+
+Constraints:
+- Your output must always be a final AI system prompt the user can paste into a model. Do not describe tasks for another AI. Do not tell the model to “create a prompt”.
+- If the user asks to “turn notes into a prompt” or “brief models about X”, treat your output as a reusable system prompt that configures how the model will behave across future tasks.
+- Do not wrap the entire output in code fences unless the user explicitly asks for that.
+- Prefer restructuring over paraphrasing; integrate salient details from the notes.
+- Handle context per philosophy: summarise long content before inclusion; reference context explicitly (file names, error messages, headings); treat attachments as named units (FILE:…, CODE:…, IMAGE:…).
+- Do not invent new features or requirements; only use facts from the input.
+- If essential details are missing, add a concise "Clarifying question" line at the end listing what's needed.
+- Be concise, specific, and actionable.
+
+The final prompt must use this structure (headings allowed; return a single prompt block the user can paste as-is):
+- Role: [model role]
+- Goal: [single, concrete outcome]
+- Context: [short bullets with the key facts from the input]
+- Constraints: [non‑negotiables, behavior/style rules, things to avoid]
+- Output format: [exact expected format: e.g., React component file, JSON schema, copy-ready microcopy]
+- Quality rules: [e.g., no hallucinations, be explicit, cite assumptions, crisp bullets, "output must be obviously better than what a user could write in 10 seconds"]
+
+Template focus: ${templateLabel}
+
+${getTemplateGuidance(templateId)}
+`.trim();
+}
+
 const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
+const ENABLE_LLM_CLASSIFIER = process.env.ENABLE_LLM_CLASSIFIER === "true";
 
 /**
  * Lightweight heuristic classifier to improve suggestions without a model call.
  * Returns a non-general TemplateId when clear cues are present, else null.
  */
-/**
- * Lightweight heuristic classifier to improve suggestions without a model call.
- * Returns a non-general TemplateId when clear cues are present, else null.
- */
-function heuristicTemplate(
-  text: string
-): {
+function heuristicTemplate(text: string): {
   templateId: TemplateId;
   category: TemplateCategory;
   confidence: number;
@@ -301,7 +379,6 @@ function heuristicTemplate(
   const has = (...keys: string[]) => keys.some((k) => t.includes(k));
 
   // --- Coding ---
-  // Keywords: "code", "script", "typescript", "javascript", "node.js", "next.js", "react", "api", "function", "class", "component", "bug", "error", "stack trace", "SQL", "query"
   const isCodingContext = has(
     "code",
     "script",
@@ -334,7 +411,6 @@ function heuristicTemplate(
       confidence: 0.9,
     };
   }
-  // If it hits general coding keywords but not specific ones above, default to feature
   if (isCodingContext) {
     return {
       templateId: "coding_feature",
@@ -424,7 +500,12 @@ function heuristicTemplate(
 
   // --- Communication ---
   if (
-    has("reply to this", "respond to this", "answer this email", "answer this message")
+    has(
+      "reply to this",
+      "respond to this",
+      "answer this email",
+      "answer this message"
+    )
   ) {
     return {
       templateId: "communication_reply",
@@ -462,17 +543,27 @@ function heuristicTemplate(
 /**
  * Classify free-form text into a TemplateId + category.
  * Returns general_general on failure, with confidence clamped to [0,1].
+ * Uses heuristics by default; LLM classifier is gated by ENABLE_LLM_CLASSIFIER.
  */
 export async function classifyTemplate(text: string): Promise<{
   templateId: TemplateId;
   category: TemplateCategory;
   confidence: number;
 }> {
-  // 1) Try fast heuristic first
+  // 1) Try fast heuristic first (no model call)
   const h = heuristicTemplate(text);
   if (h) return h;
 
-  // 2) If no OpenAI key, fall back to general
+  // 2) Gate LLM classifier behind env flag (default disabled for speed/cost)
+  if (!ENABLE_LLM_CLASSIFIER) {
+    return {
+      templateId: "general_general",
+      category: "general",
+      confidence: 0.5,
+    };
+  }
+
+  // 3) If no OpenAI key, fall back to general
   if (!process.env.OPENAI_API_KEY) {
     return {
       templateId: "general_general",
@@ -481,8 +572,9 @@ export async function classifyTemplate(text: string): Promise<{
     };
   }
 
+  // 4) LLM-based classifier (only when explicitly enabled)
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  
+
   const system = `You are a classifier that maps user instructions to a templateId.
 
 You MUST respond with exactly one JSON object, no extra text, in this form:
@@ -515,13 +607,13 @@ Guidance:
       model: DEFAULT_MODEL,
       messages,
       temperature: 0,
+      max_tokens: 128,
     });
     const content = completion.choices[0]?.message?.content || "";
     let parsed: any = null;
     try {
       parsed = JSON.parse(content);
     } catch {
-      // try to extract JSON substring
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
         try {
@@ -539,11 +631,10 @@ Guidance:
         confidence = Math.max(0, Math.min(1, parsed.confidence));
       }
     }
-    
+
     const category = templateRegistry[templateId].category;
     return { templateId, category, confidence };
-  } catch (err) {
-    // Fallback to general
+  } catch (_err) {
     return {
       templateId: "general_general",
       category: "general",

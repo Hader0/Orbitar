@@ -1,0 +1,726 @@
+# Orbitar Project Status & Roadmap
+
+## Quick Status Checklist (Updated 2025-11-24)
+
+This checklist summarizes what is implemented vs. still pending, based on the current codebase. It complements the narrative sections below.
+
+### ✅ Completed
+
+- Backend foundation
+
+  - [x] Next.js 14 App Router with TypeScript and Tailwind
+  - [x] Prisma schema and SQLite dev DB
+    - [x] Models: User, ApiKey, Account, Session, VerificationToken, PromptEvent, UserTemplatePreference
+    - [x] Migrations present in backend/prisma/migrations
+  - [x] NextAuth CredentialsProvider “Dev Login” with JWT sessions
+
+- Core APIs
+
+  - [x] /api/refine-prompt with:
+    - [x] API key auth (Bearer), per-plan rate limits
+    - [x] Template resolution (explicit id → category default → legacy mapping → heuristic/LLM)
+    - [x] OpenAI SDK with prioritized model fallback; REST fallback path
+    - [x] PromptEvent logging on success and error paths
+    - [x] Incognito flag respected (user default + per-request override)
+    - [x] Token and latency capture when available
+  - Templates
+    - [x] /api/templates (public registry listing)
+    - [x] /api/templates/me (session-scoped enabled flags)
+    - [x] /api/templates/for-key (plan and user preferences filtered via API key)
+    - [x] /api/templates/preferences (persist enable/disable)
+    - [x] templateRegistry with categories and minPlan rules
+    - [x] Heuristic classifyTemplate with optional LLM classifier gate
+  - User and Admin
+    - [x] /api/user/me (plan, usage counters, privacy flags)
+    - [x] /api/user/stats (per-user totals, last 7d, byCategory/byTemplate)
+    - [x] /api/admin/stats (guarded by ADMIN_EMAIL; totals, last 30d, byCategory/byTemplate)
+    - [x] /api/settings/privacy (update allowDataUse/defaultIncognito)
+  - Stripe
+    - [x] /api/stripe/checkout (creates subscription Checkout session; ensures customer)
+    - [x] /api/webhooks/stripe (verifies signature, maps price → plan, updates user)
+    - [x] Stripe library wrapper and env guards
+
+- Web app UI
+
+  - [x] Dashboard page
+    - [x] Plan card with usage display
+    - [x] Subscription status surfaced (stripeSubscriptionStatus)
+    - [x] API key management (generate/revoke via server actions)
+    - [x] UsageCard and PrivacyCard wired
+    - [x] UpgradeCard and CheckoutButtons present
+  - [x] Templates section scaffold (templates/page.tsx, TemplatesClient.tsx)
+  - [x] Installed page and Privacy form scaffolds present
+
+- Chrome extension
+
+  - [x] Manifest V3 with permissions/host_permissions
+  - [x] Background script:
+    - [x] Refine flow → calls web app /api/refine-prompt using stored API key
+    - [x] Classify flow (legacy), Get templates, Get user plan
+    - [x] Dev-friendly endpoint fallbacks (:3000 primary)
+  - [x] Popup page to store Orbitar API key in chrome.storage.sync
+  - [x] Content script and styles present (injection UI and ChatGPT adapter per spec)
+  - [x] Keyboard shortcut handler for “refine-prompt”
+
+- Data and privacy
+  - [x] PromptEvent model and writes on success/failure
+  - [x] Privacy flags on User (allowDataUse, defaultIncognito) and update API
+  - [x] Incognito respected in logs; token/latency captured where available
+
+### ⏳ Outstanding / To Do
+
+- Local dev setup polish
+
+  - [ ] Ensure backend/.env contains OPENAI_API_KEY and OPENAI_MODEL
+  - [ ] Verify /api/refine-prompt end-to-end latency and model priority behavior
+  - [ ] Add DEBUG=true toggle docs and recommended usage
+
+- Stripe wiring and testing
+
+  - [ ] Set STRIPE_SECRET_KEY in .env
+  - [ ] Set STRIPE_PRICE_BUILDER and STRIPE_PRICE_PRO (or legacy STRIPE_PRICE_LIGHT) and verify plan mapping
+  - [ ] Configure STRIPE_WEBHOOK_SECRET and test webhook signature verification
+  - [ ] Wire Upgrade buttons fully and run checkout flow (Free → Builder/Pro), confirm plan/status updates in DB
+
+- Authentication (Production)
+
+  - [ ] Add Google OAuth (GoogleProvider) with proper consent screen
+  - [ ] Replace Dev Login in prod; set NEXTAUTH_URL and NEXTAUTH_SECRET
+
+- Logging/analytics depth
+
+  - [ ] Add acceptance/edit behavior tracking (post-refine edit intensity and accept/revert signals)
+  - [ ] Extend PromptEvent for error taxonomies and model attribution consistency
+  - [ ] Token accounting consistency across SDK/REST paths
+
+- Dashboard and templates UX
+
+  - User dashboard
+    - [ ] Toast notifications for API actions/errors
+    - [ ] Time-range filters and charts (24h/7d/30d/custom) in UsageCard
+  - Master dashboard
+    - [ ] Deep time-series, by plan/model/category charts
+    - [ ] “Promising Results” pipeline for template evolution
+  - Templates store
+    - [ ] Browsing by category/tags
+    - [ ] Enable/disable management UX and status badges (GA/Beta/Experimental)
+    - [ ] Ratings/feedback stubs
+
+- Privacy, consent, and onboarding
+
+  - [ ] Build the “Data Use” onboarding screen (extension + web app)
+  - [ ] Opt-in control copy and flows; “Incognito refine” UI affordance in extension
+  - [ ] Document collection/anonymization/retention (website pages)
+
+- Production readiness
+
+  - [ ] Switch Prisma provider to PostgreSQL and move DATABASE_URL to Postgres
+  - [ ] Migrate and validate on hosted DB (Supabase/Neon/Vercel Postgres)
+  - [ ] Configure Vercel/host envs (DB, NextAuth, OpenAI, Stripe, Google)
+  - [ ] Update extension API_BASE_URL to prod; package and publish to Chrome Web Store
+
+- QA and hardening
+
+  - [ ] Structured manual test plan for extension (ChatGPT + generic inputs)
+  - [ ] Error handling polish in extension (backend down, invalid key, rate limit)
+  - [ ] E2E smoke tests for dashboard actions and key flows
+  - [ ] Security review (hash API keys in prod, input limits, auth checks)
+
+- Legal/compliance
+  - [ ] Publish Privacy Policy and Terms of Service pages (needed for OAuth + Chrome Store)
+
+---
+
+This document outlines the current state of the Orbitar project, detailing what has been completed, what remains for both a functional Development environment and a Production-ready launch, and the broader product/UX direction (dashboards, analytics, background agents, and template ecosystem).
+
+Orbitar is a **Chrome extension + SaaS** that turns messy user text into **clean, model-ready prompts** via an inline, “native-feeling” toolbar that appears inside tools like ChatGPT and other text areas. The backend provides authentication, plans/limits, analytics, and an evolving template system.
+
+---
+
+## 1. Product Overview
+
+### 1.1 What Orbitar Is
+
+- A **Chrome extension** that:
+
+  - Detects focused text areas (e.g., ChatGPT composer).
+  - Injects an inline Orbitar toolbar above the input.
+  - Lets users select a **category**, **template**, tone/model style, etc.
+  - Refines the raw text into a **high-quality AI prompt**, then replaces the input with the refined version.
+
+- A **SaaS backend** (Next.js 14, Prisma, NextAuth, Stripe wiring) that:
+  - Issues and manages **API keys**.
+  - Applies **per-plan daily limits**.
+  - Routes refinement requests to OpenAI.
+  - Uses a **template system** to enforce structure (goal/context/task/output rules).
+
+The core promise: Orbitar becomes a **prompt pre-processor** — it optimizes _what_ you send to AI, regardless of which model/provider you use.
+
+---
+
+## 2. Dashboards & Analytics
+
+When a user logs in on the website, they see a **User Dashboard**.  
+When an admin logs in, they see a **Master Dashboard** with full analytics.
+
+These dashboards are central to Orbitar’s “trained on real usage” story.
+
+### 2.1 User Dashboard (Per-User View)
+
+**Audience:** Individual users (Free, Light, Pro, etc.).
+
+**Primary responsibilities:**
+
+- **API Key Management**
+
+  - Generate/revoke keys (soft delete).
+  - Show last-used timestamp and total calls per key.
+
+- **Usage Overview**
+
+  - Total prompts refined (global and per key).
+  - Daily usage vs. plan limit (e.g., Free vs Light vs Pro).
+  - Average latency over selectable time windows.
+
+- **Template & Category Breakdown**
+
+  - Which **categories** (coding, writing, planning, research, communication, creative, general) they use most.
+  - Which **templates** they rely on heavily.
+
+- **Time-Based Insights**
+
+  - Filters: `Last 24h`, `Last 7 days`, `Last 30 days`, `Custom range`.
+  - Charts:
+    - Line chart: prompts refined per day.
+    - Stacked bar: templates/categories per time window.
+
+- **Quality/Behavior Signals (per user)**
+  - Approximate **acceptance rate**:
+    - % of refinements that are used “as is” (minimal edits before send).
+  - Edit intensity:
+    - Light vs heavy edits after refinement.
+  - Optional: “Prompt satisfaction” if you ever add rating UI.
+
+The User Dashboard should feel like a **personal prompt cockpit**: clean overview + nerdy detail for people who care.
+
+---
+
+### 2.2 Master Dashboard (Admin / “Mission Control”)
+
+**Audience:** You (and any future admins).
+
+**Primary responsibilities:**
+
+- **Global Metrics**
+
+  - Total prompts refined (lifetime and per time range).
+  - Total users per plan (Free / Light / Pro / future Team).
+  - Aggregate latency statistics:
+    - p50 / p90 / p99 latency.
+    - Error rates per endpoint/model.
+  - Token-level metrics if tracked:
+    - Total input tokens vs output tokens.
+
+- **Per-Category Analytics**
+
+  - Volume per category (coding, writing, planning, research, communication, creative, general).
+  - Category growth over time:
+    - Which categories are trending up/down.
+
+- **Per-Template Analytics**
+
+  - Top templates by:
+    - Usage (total refinements).
+    - Acceptance rate / low-edit rate.
+    - Latency and error rate.
+  - Underperforming templates:
+    - High error rate.
+    - Low usage.
+    - High edit/revert behavior.
+
+- **Time-Series & Trend Analysis (Deep)**
+
+  - Time filters: `Last 24h`, `7d`, `30d`, `90d`, `YTD`, `All`, `Custom`.
+  - Graph examples:
+    - Line charts:
+      - Total prompts/day, segmented by plan.
+      - Avg latency/day, segmented by model or category.
+    - Stacked bars:
+      - Category breakdown per week/month.
+    - Heatmaps:
+      - Activity by hour of day vs day of week (usage patterns).
+  - Drill-down interactions:
+    - Click a data point (e.g. “coding_feature template last 7 days”) → see:
+      - Plan distribution.
+      - Model distribution (fast vs precise).
+      - Behavior signals (accept/edit/revert).
+
+- **“Promising Results” / Template Pipeline Tab**
+
+  - A dedicated area for **template evolution**:
+    - Shows templates and experimental variants ranked by:
+      - Usage (last 7/30/90 days).
+      - Acceptance/edit behavior.
+      - User ratings (from template store).
+    - Columns like:
+      - `TemplateId`
+      - `Version`
+      - `Status` (experimental / beta / GA / deprecated)
+      - `Usage (last 30d)`
+      - `Acceptance rate`
+      - `Average latency`
+    - This becomes the **“next templates to release”** triage board:
+      - Promote from Experimental → Beta → GA.
+      - Flag candidates for deprecation.
+
+- **Plan & Monetization Insights**
+  - Revenue/plan breakdown (once Stripe is wired).
+  - Usage-per-dollar estimates.
+  - Overuse/abuse detection (e.g., users constantly hitting max limits).
+
+The Master Dashboard should feel like a **dark-theme mission control UI** with strong accent colors, animated counters, and smooth drill-downs.
+
+---
+
+## 3. Data Collection, Logging & Privacy
+
+Goal: capture **as much useful signal as possible** while staying privacy-respectful and aligned with best practices. This is a top priority.
+
+### 3.1 Default Per-Refinement Logs
+
+For **every** refinement, log:
+
+**Metadata (high value, low risk):**
+
+- `userId` (internal UUID or hashed ID).
+- `plan` (Free / Light / Pro / future Team).
+- `timestamp` + time zone offset.
+- `source` (ChatGPT, Notion, Gmail, “Other Web”, etc.).
+- `category` and `templateId`.
+- `modelStyle` (fast/precise) and actual `model` used.
+- `latencyMs`.
+- `status` (success / error type).
+- `inputLengthTokens`, `outputLengthTokens`.
+
+**Behavioral signals:**
+
+- Was the refined text:
+  - Used as-is?
+  - Edited lightly (small changes) before send?
+  - Edited heavily?
+  - Abandoned (user reverted or cleared input)?
+- Derived by:
+  - Comparing post-refinement text vs final text sent.
+  - Measuring the time from **Refine → Send** or **Refine → editor changes**.
+
+These signals feed:
+
+- Template ranking.
+- Template pruning (what to drop).
+- The **“Promising Results”** view in the Master Dashboard.
+- Marketing claims like “Refined based on thousands/millions of real prompts.”
+
+---
+
+### 3.2 Logging Prompt Content Safely
+
+Raw text is the most powerful data but also the most sensitive.
+
+#### A. Explicit consent and controls
+
+- Onboarding and settings clearly explain:
+  - By default, Orbitar uses your text **only** to generate refinements (it must go to Orbitar + model provider).
+  - Using your content to **improve templates** is optional and controlled.
+- Controls:
+  - Global toggle: **“Share anonymized prompts to improve Orbitar”** (opt-in is safest).
+  - Per-refinement override: **“Incognito refine”** in the toolbar that:
+    - Skips content logging even if the global toggle is on.
+
+#### B. Aggressive anonymization
+
+Before anything is used for improvement / analytics:
+
+- Automatic PII redaction pipeline:
+  - Strip emails, phone numbers, URLs, obvious IDs, credit-card patterns, etc.
+  - Optionally redact likely names / usernames if they follow certain patterns.
+- Store `userId` as internal IDs, not emails or raw identifiers.
+- Keep a clear boundary between:
+  - **Operational logs** (debugging, abuse detection).
+  - **Improvement data** (for template analytics and Prompt Lab).
+
+#### C. Retention policy
+
+- Keep raw or lightly redacted text for a limited period (e.g. 30–90 days).
+- Periodically aggregate into:
+  - Usage counts & distributions.
+  - Template performance metrics.
+- After the retention window:
+  - Delete or fully anonymize raw text.
+  - Keep only aggregate, non-identifying metrics.
+
+#### D. Ecosystem context & positioning
+
+- Many AI tools log prompts to improve models/features; this is **normal** when users consent.
+- The bad reputation comes from:
+  - Silent collection.
+  - Over-collection (grabbing whole pages, passwords, etc.).
+  - Vague or misleading privacy policies.
+- Orbitar’s positioning:
+  - **Transparent**: clear, front-and-center explanation of what is collected and why.
+  - **Constrained**: only used to provide/improve Orbitar, never sold, never shared with unrelated third parties.
+  - **User-controlled**: explicit opt-in, easy opt-out, Incognito refines.
+
+#### E. Truthful marketing language
+
+You **cannot** honestly say:
+
+> “No private data leaves your keyboard.”
+
+Because:
+
+- The text must be sent to Orbitar’s backend and your AI provider in order to generate a refinement.
+
+What you **can** say:
+
+- “Your text is only sent to Orbitar and our AI provider to generate the refinement.”
+- “We never sell your data.”
+- “We never train our own models on your content unless you explicitly opt in.”
+- “When you opt in, we strip common identifiers before using anonymized snippets to improve templates.”
+- “Incognito refines always skip content logging.”
+
+The marketing narrative becomes:
+
+> “Refined based on thousands/millions of prompts from users who explicitly chose to help improve Orbitar — with aggressive anonymization and clear controls.”
+
+---
+
+### 3.3 Onboarding & Data Use Screen (Post-Install)
+
+After installing the extension (and ideally on first login to the web app), users should be shown a **“Thank you / Data Use”** screen that:
+
+- Explains what Orbitar does.
+- Explains how text is handled.
+- Asks for **explicit opt-in** to share anonymized prompt results.
+
+**Concept copy (draft):**
+
+> **Thanks for installing Orbitar 🚀**  
+> Orbitar helps you turn half-baked ideas into sharp, model-ready prompts — right inside tools like ChatGPT.
+>
+> To keep improving the templates and categories that power Orbitar, we’d love your help.
+>
+> **How we handle your text**
+>
+> - Your text is sent securely to Orbitar and our AI provider **only** to generate a refined prompt.
+> - By default, we **don’t use your content to train models or build new templates**.
+> - If you choose to help improve Orbitar, we:
+>   - Strip out common identifiers (emails, phone numbers, URLs, IDs).
+>   - Store anonymized snippets for a limited time to analyze which templates work best.
+>   - Never sell your text or share it with advertisers.
+>
+> **Help improve Orbitar** > [ ] Share anonymized prompts & refinements to improve templates  
+> _(You can change this any time in Settings. “Incognito refine” always skips logging.)_
+
+**Implementation notes:**
+
+- This screen should appear:
+  - Immediately after first install (extension opens a new tab).
+  - Or on first login if discovered via the web app.
+- The same settings should be:
+  - Accessible in the User Dashboard.
+  - Reflected in extension UI (e.g. Settings → “Data & privacy”).
+
+---
+
+## 4. Background “Prompt Lab” Agents
+
+Background agents exist primarily for **R&D and testing**, not as your core marketing claim.
+
+### 4.1 Core Purposes
+
+1. **Stress-Test Templates**
+
+   - Feed them structured tasks:
+     - Coding bugs, feature requests, doc-writing tasks, blog intros, research questions, planning tasks.
+   - Compare how different templates perform on the same input.
+   - Measure:
+     - Structural adherence (did it follow the format rules?).
+     - Length, clarity, token usage.
+     - Latency and error rate per template/model.
+
+2. **Auto-Generate & Refine Templates**
+
+   - “Meta-agents” ingest:
+     - Best-performing real prompts (aggregated/anonymized).
+     - Worst-performing ones (high edit/revert).
+   - They propose:
+     - Improved system instructions.
+     - New template variants.
+   - You review proposals → keep the winners → mark them as **experimental** in the Master Dashboard.
+
+3. **Build a Synthetic Test Corpus**
+   - Maintain a fixed benchmark set:
+     - e.g. 100 coding, 100 writing, 100 planning, 100 research prompts.
+   - Agents can:
+     - Generate realistic-but-not-real-user prompts to expand this corpus.
+   - Every time you change templates/models:
+     - Re-run the corpus to see if quality or latency improved/regressed.
+
+### 4.2 Continuous Validation Loop
+
+- **Nightly job:**
+
+  - Sample 100–500 recent prompts (from users who opted in to data use).
+  - Run them through:
+    - Current production templates.
+    - 1–2 experimental templates.
+  - Score outputs (automatic + heuristic checks).
+
+- **Master Dashboard “Prompt Lab” panel:**
+  - Shows:
+    - Experimental templates and variants.
+    - Test corpus metrics.
+    - Nightly job results.
+  - Feeds directly into the **“Promising Results”** tab.
+
+This enables the statement:
+
+> “Orbitar’s templates are continuously improved by a feedback loop of real user prompts, analytics from our Master Dashboard, and an internal ‘Prompt Lab’ of AI agents stress-testing new ideas.”
+
+---
+
+## 5. Template Ecosystem & Store
+
+### 5.1 Internal Template System
+
+- Categories (coding, writing, planning, research, communication, creative, general).
+- Each template has:
+  - `id`, `label`, `description`, `category`.
+  - Internal system instructions + output rules.
+
+### 5.2 Template Lifecycle
+
+- **Lab** → **Experimental** → **Beta** → **General Availability (GA)** → **Deprecated**
+
+- Driven by:
+  - Usage metrics.
+  - Acceptance/edit behavior.
+  - User ratings/feedback (from template store).
+  - Background agent experiments (Prompt Lab).
+
+### 5.3 Website Template Section / Store
+
+- Public **Templates** section on the site:
+
+  - Users can:
+    - Browse templates by category and tags.
+    - Enable/disable templates in their personal profile.
+    - See which templates are:
+      - GA
+      - Beta (early access)
+      - Experimental (admin-only view)
+
+- **Plan-based access:**
+
+  - **Free**:
+    - Limited set of core templates.
+  - **Light** (renamed from “Builder”; geared toward lighter AI users):
+    - Access to a broader set.
+    - Some Beta templates.
+  - **Pro**:
+    - Full template library.
+    - **Early access** to upcoming templates (more Beta / pre-release).
+    - Stronger daily limits.
+  - (Optional future) **Team**:
+    - Shared template collections.
+    - Org-level preferences.
+
+- **Master Dashboard integration:**
+  - “Promising Results” area lists templates rising in performance.
+  - Admin can:
+    - Promote templates from Experimental → Beta → GA.
+    - Attach “Beta” flags that show up in the store.
+    - Review user feedback/rating summaries.
+
+---
+
+## 6. Design System & Anti–“AI Slop” Frontend Direction
+
+All web UI (marketing site + dashboards) should follow this anti–“AI slop” brief:
+
+- **Typography**
+
+  - Use distinctive, beautiful fonts.
+  - Avoid generic system fonts (Arial, Inter, Roboto).
+  - Choose typefaces that reinforce mood (e.g., IDE-inspired mono fonts for metrics, expressive sans/serif for headings).
+
+- **Color & Theme**
+
+  - Commit to a cohesive aesthetic:
+    - Bold primary background (often dark).
+    - Strong, sharp accent color(s).
+  - Use CSS variables for palette consistency.
+  - Draw inspiration from:
+    - IDE themes.
+    - Specific cultural/visual aesthetics.
+
+- **Motion**
+
+  - Use animations intentionally:
+    - Page-load sequences with staggered reveals.
+    - Subtle hover/micro-interactions on cards and charts.
+  - Prefer CSS-only animations where possible.
+  - For React, use Framer Motion / Motion library for high-impact transitions.
+
+- **Backgrounds**
+
+  - Avoid flat, boring, single-color backgrounds.
+  - Layer:
+    - Gradients.
+    - Noise textures.
+    - Abstract shapes or geometric patterns.
+  - Make backgrounds feel “ambient” and contextual, not generic.
+
+- **Dashboard Aesthetic**
+
+  - **User Dashboard:**
+
+    - Polished IDE-style theme.
+    - Tight typography, rich background.
+    - Beautiful charts, smooth hover interactions.
+
+  - **Master Dashboard:**
+    - Dark “mission control” vibe.
+    - Strong accent colors for status indicators.
+    - Animated number counters and cards for key metrics (total prompts, total tokens, avg latency, active users, etc.).
+    - Clear layout for drill-down analytics and Prompt Lab views.
+
+Above all: avoid predictable layouts, overused fonts, generic purple-on-white gradients, and cookie-cutter component patterns. Each page should feel specifically designed for Orbitar.
+
+---
+
+## 7. Plans & Pricing (Conceptual Direction)
+
+Conceptual tiering:
+
+- **Free**
+
+  - Limited daily refinements.
+  - Core template set only.
+
+- **Light** (renamed from “Builder”; for lighter AI usage)
+
+  - Medium daily limits.
+  - Access to more templates and some Beta ones.
+  - Geared towards users who benefit from better prompts but aren’t heavy AI users.
+
+- **Pro**
+
+  - High daily limits.
+  - All templates + early access to new ones.
+  - Best suited for builders, founders, power users.
+
+- **(Future) Team**
+  - Shared usage pool.
+  - Shared template libraries.
+  - Organization-level analytics.
+
+These tiers will be wired to Stripe and exposed in the marketing site + dashboards.
+
+---
+
+## 8. ✅ Completed (Current State)
+
+### Backend (`/backend`)
+
+- **Framework**: Next.js 14 App Router with TypeScript & Tailwind CSS.
+- **Database**: Prisma Schema defined (`User`, `ApiKey`, `Plans`). SQLite configured for local dev.
+- **Authentication**: NextAuth.js set up with `CredentialsProvider` for "Dev Login" (bypassing Google OAuth for now).
+- **API**:
+  - `/api/auth/*`: Handles login/session.
+  - `/api/refine-prompt`: Validates API keys, checks daily limits, selects templates, and calls OpenAI (logic implemented).
+  - Server Actions: `generateApiKey`, `revokeApiKey` (with soft delete).
+- **Dashboard**: UI for viewing plan, usage, and managing API keys.
+- **Styling**: Fixed dark mode text visibility issues.
+
+### Chrome Extension (`/extension`)
+
+- **Manifest V3**: Correctly configured with permissions and host permissions.
+- **Content Script**:
+  - Detects focus on inputs/textareas/content-editables.
+  - Injects floating Orbitar icon on generic sites.
+  - **ChatGPT adapter**:
+    - Renders a “ChatGPT-style” inline toolbar positioned _above_ the input/composer.
+    - Shows plan pill, category/template selects, model style, and a styled **Refine** button.
+- **Logic**:
+  - Sends text + options to backend via background script.
+  - Receives refined text and replaces the input value.
+- **Popup**:
+  - Simple settings page to save the Orbitar API Key into `chrome.storage.sync`.
+- **Background**:
+  - Handles API calls to backend (`localhost:3001` and fallbacks) to avoid CORS issues in the content script.
+
+---
+
+## 9. 🛠 To Do: Development Environment
+
+_Goal: Get the app fully working on your local machine for testing and demoing._
+
+1. **OpenAI API Key**
+
+   - [ ] Get a real OpenAI API Key.
+   - [ ] Update `backend/.env` with `OPENAI_API_KEY=sk-...` and `OPENAI_MODEL` (e.g. `gpt-5-mini` or equivalent).
+   - [ ] Verify `/api/refine-prompt` works reliably and quickly (optimize away double-model calls where possible).
+
+2. **Stripe Integration (Mock/Test)**
+
+   - [ ] Set up Stripe CLI for local webhook forwarding.
+   - [ ] Implement `/api/webhooks/stripe` to handle:
+     - `checkout.session.completed`
+     - `customer.subscription.updated`
+   - [ ] Wire “Subscribe/Upgrade” buttons on the dashboard to Stripe Checkout URLs and test plan transitions (Free → Light → Pro).
+
+3. **Error Handling & Polish**
+   - [ ] Add toast notifications for success/error states in the Dashboard.
+   - [ ] Improve extension error messages (backend down, key invalid, rate limit, etc.).
+   - [ ] Add clear UI around “Incognito refine” and data-usage preferences (even if stubbed initially).
+
+---
+
+## 10. 🚀 To Do: Production Environment
+
+_Goal: Deploy the app for real users._
+
+1. **Database Migration**
+
+   - [ ] Switch from SQLite (`file:./dev.db`) to PostgreSQL (e.g., Supabase, Neon, or Vercel Postgres).
+   - [ ] Update `schema.prisma` provider to `postgresql`.
+   - [ ] Run `npx prisma migrate deploy`.
+
+2. **Authentication (Real)**
+
+   - [ ] Create a Google Cloud Project.
+   - [ ] Configure OAuth Consent Screen and get Client ID / Secret.
+   - [ ] Switch `authOptions` in NextAuth from `CredentialsProvider` to `GoogleProvider`.
+   - [ ] Set `NEXTAUTH_URL` to the real domain (e.g., `https://getorbitar.com`).
+
+3. **Environment Variables**
+
+   - [ ] Set production variables in Vercel/host:
+     - `DATABASE_URL` (Postgres)
+     - `NEXTAUTH_SECRET`
+     - `OPENAI_API_KEY`
+     - `OPENAI_MODEL`
+     - `STRIPE_SECRET_KEY` (Live mode)
+     - `STRIPE_WEBHOOK_SECRET` (Live mode)
+     - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`
+
+4. **Extension Deployment**
+
+   - [ ] Update `API_BASE_URL` in `extension/background.js` to the production URL.
+   - [ ] Create a production build of the extension (zip `extension/` folder).
+   - [ ] Submit to Chrome Web Store (pay fee, provide screenshots, privacy URL, etc.).
+
+5. **Legal & Compliance**
+   - [ ] Add Privacy Policy and Terms of Service pages (required for Google OAuth and Chrome Web Store).
+   - [ ] Document data collection, anonymization, and retention policies clearly.

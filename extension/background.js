@@ -1,13 +1,13 @@
 // background.js
 
 /**
- * Change this to "https://getorbitar.com" when you deploy the backend
- * Local dev backend runs on 3000 (Next.js)
+ * In dev, the Next.js app runs on :3000. Prefer that, with a single sensible fallback.
+ * For production, switch to https://getorbitar.com (or your prod domain) and adjust host_permissions.
  */
-const API_BASE_URL = "http://localhost:3001";
-const API_BASE_URL_FALLBACK = "http://127.0.0.1:3001";
-const API_BASE_URL_ALT = "http://localhost:3000";
-const API_BASE_URL_ALT_FALLBACK = "http://127.0.0.1:3000";
+const API_BASE_URL = "http://localhost:3001"; // unused in refine (kept for plan/me/classify legacy)
+const API_BASE_URL_FALLBACK = "http://127.0.0.1:3001"; // unused in refine (kept for plan/me/classify legacy)
+const API_BASE_URL_ALT = "http://localhost:3000"; // primary for refine in dev
+const API_BASE_URL_ALT_FALLBACK = "http://127.0.0.1:3000"; // fallback for refine in dev
 const DEBUG = true;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -20,10 +20,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.type === "GET_USER_PLAN") {
     handleGetUserPlan(request, sendResponse);
     return true;
+  } else if (request.type === "GET_TEMPLATES") {
+    handleGetTemplates(request, sendResponse);
+    return true;
   }
 });
 
-async function handleGetUserPlan(request, sendResponse) {
+async function handleGetUserPlan(_request, sendResponse) {
   try {
     const { orbitarToken } = await chrome.storage.sync.get(["orbitarToken"]);
     if (!orbitarToken) {
@@ -32,13 +35,13 @@ async function handleGetUserPlan(request, sendResponse) {
     }
 
     let resp;
-    
+
     // Try primary, then fallbacks
     const endpoints = [
       `${API_BASE_URL}/api/user/me`,
       `${API_BASE_URL_FALLBACK}/api/user/me`,
       `${API_BASE_URL_ALT}/api/user/me`,
-      `${API_BASE_URL_ALT_FALLBACK}/api/user/me`
+      `${API_BASE_URL_ALT_FALLBACK}/api/user/me`,
     ];
 
     for (const endpoint of endpoints) {
@@ -47,11 +50,11 @@ async function handleGetUserPlan(request, sendResponse) {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${orbitarToken}`
-          }
+            Authorization: `Bearer ${orbitarToken}`,
+          },
         });
         if (resp) break;
-      } catch (e) {
+      } catch (_e) {
         // continue to next
       }
     }
@@ -66,6 +69,50 @@ async function handleGetUserPlan(request, sendResponse) {
   } catch (error) {
     console.error("Orbitar get plan error:", error);
     sendResponse({ error: "Failed to fetch plan" });
+  }
+}
+
+async function handleGetTemplates(_request, sendResponse) {
+  try {
+    const { orbitarToken } = await chrome.storage.sync.get(["orbitarToken"]);
+    if (!orbitarToken) {
+      sendResponse({ error: "No token" });
+      return;
+    }
+
+    let resp;
+    const endpoints = [
+      `${API_BASE_URL_ALT}/api/templates/for-key`,
+      `${API_BASE_URL_ALT_FALLBACK}/api/templates/for-key`,
+      `${API_BASE_URL}/api/templates/for-key`,
+      `${API_BASE_URL_FALLBACK}/api/templates/for-key`,
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        resp = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${orbitarToken}`,
+          },
+        });
+        if (resp) break;
+      } catch (_e) {
+        // continue
+      }
+    }
+
+    if (!resp || !resp.ok) {
+      sendResponse({ error: "Failed to fetch templates" });
+      return;
+    }
+
+    const data = await resp.json();
+    sendResponse(data);
+  } catch (error) {
+    console.error("Orbitar get templates error:", error);
+    sendResponse({ error: "Failed to fetch templates" });
   }
 }
 
@@ -163,7 +210,8 @@ async function handleClassifyRequest(request, sendResponse) {
 // Handle refine requests from the content script
 async function handleRefineRequest(request, sendResponse) {
   try {
-    const { text, modelStyle, template, templateId, category } = request;
+    const { text, modelStyle, template, templateId, category, incognito } =
+      request;
 
     // Get token from storage
     const { orbitarToken } = await chrome.storage.sync.get(["orbitarToken"]);
@@ -171,151 +219,126 @@ async function handleRefineRequest(request, sendResponse) {
       sendResponse({
         error:
           "No Orbitar API key found. Open the Orbitar extension popup and save your API key first.",
+        code: "NO_TOKEN",
       });
       return;
     }
 
-    let response;
-    let refineUrl = `${API_BASE_URL}/api/refine-prompt`;
-    try {
-      response = await fetch(refineUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${orbitarToken}`,
-        },
-        body: JSON.stringify({
-          text,
-          modelStyle: modelStyle || "gpt-mini",
-          templateId,
-          category,
-          template: template || "general",
-        }),
-      });
-    } catch (_e) {
+    // Dev-first endpoints: prefer Next.js dev server on :3000, minimal fallbacks.
+    const endpoints = [
+      `${API_BASE_URL_ALT}/api/refine-prompt`, // http://localhost:3000
+      `${API_BASE_URL_ALT_FALLBACK}/api/refine-prompt`, // http://127.0.0.1:3000
+    ];
+
+    const payload = {
+      text,
+      modelStyle: modelStyle || "gpt-mini",
+      templateId,
+      category,
+      template: template || "general",
+      source: "chatgpt",
+      incognito: typeof incognito === "boolean" ? incognito : undefined,
+    };
+
+    let lastNetworkError = null;
+    for (const refineUrl of endpoints) {
       try {
-        refineUrl = `${API_BASE_URL_FALLBACK}/api/refine-prompt`;
-        response = await fetch(refineUrl, {
+        const response = await fetch(refineUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${orbitarToken}`,
           },
-          body: JSON.stringify({
-            text,
-            modelStyle: modelStyle || "gpt-mini",
-            templateId,
-            category,
-            template: template || "general",
-          }),
+          body: JSON.stringify(payload),
         });
-      } catch (_e2) {
-        try {
-          refineUrl = `${API_BASE_URL_ALT}/api/refine-prompt`;
-          response = await fetch(refineUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${orbitarToken}`,
-            },
-            body: JSON.stringify({
-              text,
-              modelStyle: modelStyle || "gpt-mini",
-              templateId,
-              category,
-              template: template || "general",
-            }),
-          });
-        } catch (_e3) {
+
+        if (!response.ok) {
+          // Backend reachable but error: parse and surface structured message
+          let data = null;
           try {
-            refineUrl = `${API_BASE_URL_ALT_FALLBACK}/api/refine-prompt`;
-            response = await fetch(refineUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${orbitarToken}`,
-              },
-              body: JSON.stringify({
-                text,
-                modelStyle: modelStyle || "gpt-mini",
-                templateId,
-                category,
-                template: template || "general",
-              }),
-            });
-          } catch (_e4) {
-            sendResponse({
-              error: "Orbitar: backend unreachable. Is dev server running?",
-              _debug: {
-                endpoints: [
-                  `${API_BASE_URL}/api/refine-prompt`,
-                  `${API_BASE_URL_FALLBACK}/api/refine-prompt`,
-                  `${API_BASE_URL_ALT}/api/refine-prompt`,
-                  `${API_BASE_URL_ALT_FALLBACK}/api/refine-prompt`,
-                ],
-                networkError: true,
-              },
-            });
-            return;
+            data = await response.json();
+          } catch (_e) {
+            /* ignore */
           }
-        }
-      }
-    }
 
-    if (!response.ok) {
-      let message = `Server error (${response.status}).`;
-      let errorBody = null;
-      try {
+          const status = response.status;
+          const code =
+            (data && (data.error || data.code)) ||
+            (status === 400
+              ? "BAD_REQUEST"
+              : status === 401
+              ? "AUTH_ERROR"
+              : status === 429
+              ? "RATE_LIMIT"
+              : status >= 500
+              ? "INTERNAL_ERROR"
+              : "HTTP_ERROR");
+
+          const friendly =
+            (data && (data.message || data.error)) ||
+            (code === "AUTH_ERROR"
+              ? "Your Orbitar API key looks invalid. Update it in the extension popup."
+              : code === "RATE_LIMIT"
+              ? "You’ve hit your daily limit for this plan."
+              : code === "BAD_REQUEST"
+              ? "The request was invalid. Please try again."
+              : code === "NETWORK_ERROR"
+              ? "Cannot connect to Orbitar. Check that the app is running."
+              : "Orbitar had a hiccup. Try again in a moment.");
+
+          if (DEBUG) {
+            console.debug("Orbitar refine -> error response", {
+              endpoint: refineUrl,
+              status,
+              data,
+              code,
+            });
+          }
+
+          sendResponse({
+            error: friendly,
+            code,
+            _debug: { endpoint: refineUrl, status, raw: data },
+          });
+          return;
+        }
+
+        // Success
         const data = await response.json();
-        errorBody = data;
         if (DEBUG) {
-          console.debug("Orbitar refine -> non-OK", {
-            status: response.status,
-            body: data,
+          console.debug("Orbitar refine -> success", {
             endpoint: refineUrl,
+            templateIdUsed: data.templateIdUsed,
+            categoryUsed: data.categoryUsed,
+            refinedTextLength: (data.refinedText || "").length,
           });
         }
-        if (data && data.error) {
-          message = data.error;
+        sendResponse({ refinedText: data.refinedText || text });
+        return;
+      } catch (err) {
+        // Network error (connection refused, etc) – try next endpoint
+        lastNetworkError = err;
+        if (DEBUG) {
+          console.debug("Orbitar refine -> network error", {
+            endpoint: refineUrl,
+            err,
+          });
         }
-        if (response.status === 401) {
-          message =
-            (errorBody && errorBody.error) ||
-            "Orbitar: Invalid API key. Check your dashboard.";
-        } else if (response.status === 429) {
-          message =
-            (errorBody && errorBody.error) ||
-            "Daily limit reached. Try again tomorrow.";
-        } else if (response.status >= 500) {
-          message = (errorBody && errorBody.error) || "Backend error.";
-        }
-      } catch (_e) {
-        // ignore JSON parse errors
+        continue;
       }
-      sendResponse({
-        error: message,
-        _debug: {
-          endpoint: refineUrl,
-          status: response.status,
-          body: errorBody,
-        },
-      });
-      return;
     }
 
-    const data = await response.json();
-    if (DEBUG) {
-      console.debug("Orbitar refine -> success", {
-        templateIdUsed: data.templateIdUsed,
-        categoryUsed: data.categoryUsed,
-        refinedTextLength: (data.refinedText || "").length,
-      });
-    }
-    sendResponse({ refinedText: data.refinedText || text });
-  } catch (error) {
-    console.error("Orbitar refine error:", error);
+    // If we got here, all endpoints failed to connect
     sendResponse({
-      error: "Orbitar: backend unreachable. Is dev server running?",
+      error: "Cannot connect to Orbitar. Check that the app is running.",
+      code: "NETWORK_ERROR",
+      _debug: { endpoints, lastNetworkError },
+    });
+  } catch (error) {
+    console.error("Orbitar refine error (unexpected):", error);
+    sendResponse({
+      error: "Unexpected error in extension. Try again.",
+      code: "EXTENSION_ERROR",
     });
   }
 }
