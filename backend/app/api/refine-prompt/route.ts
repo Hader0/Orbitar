@@ -18,6 +18,7 @@ import {
   getCategoryDefaultTemplate,
 } from "@/lib/templates";
 import { RefineEngine, type RefineRequest } from "@/lib/refine-engine";
+import type { UserPlanKey } from "@/lib/model-router";
 
 // ============================================================================
 // Configuration
@@ -170,6 +171,7 @@ export async function POST(req: NextRequest) {
     (user as Record<string, unknown>)?.defaultIncognito === true;
 
   try {
+    const body = await req.json();
     const {
       text,
       modelStyle,
@@ -178,7 +180,8 @@ export async function POST(req: NextRequest) {
       template: legacyTemplate,
       incognito: incognitoRaw,
       source,
-    } = await req.json();
+      attachments,
+    } = body;
 
     // Validate text
     if (!text || typeof text !== "string") {
@@ -188,13 +191,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check OpenAI configuration
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("Backend not configured: missing OPENAI_API_KEY.");
+    // Check OpenRouter configuration
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.error("Backend not configured: missing OPENROUTER_API_KEY.");
       return jsonCors(
         {
           error: "BACKEND_NOT_CONFIGURED",
-          message: "Backend not configured: missing OPENAI_API_KEY.",
+          message: "Backend not configured: missing OPENROUTER_API_KEY.",
         },
         500
       );
@@ -213,21 +216,81 @@ export async function POST(req: NextRequest) {
       console.debug("Resolved template:", { templateId, categoryUsed });
     }
 
+    // Derive user plan key for routing (lightweight mapping)
+    // TODO: Thread richer plan info if/when available (e.g. enterprise tiers)
+    const planRaw = (user.plan || "").toLowerCase();
+    let userPlanKey: UserPlanKey = "unknown";
+    if (planRaw === "free") userPlanKey = "free";
+    else if (planRaw === "builder" || planRaw === "light")
+      userPlanKey = "light";
+    else if (planRaw === "pro") userPlanKey = "pro";
+    else if (planRaw === "enterprise") userPlanKey = "enterprise";
+
     // 6. Run Refine Engine
     const start = Date.now();
 
+    // Attachments plumbing (optional)
+    // Expecting attachments: Array<{ name: string; type?: "FILE"|"CODE"|"IMAGE"|"ERROR"; content?: string }>
+    const rawAttachments = Array.isArray(attachments) ? attachments : [];
+    const ATTACHMENTS_MAX_CHARS = 4000;
+    let used = 0;
+    const attachmentNames: string[] = [];
+    const parts: string[] = [];
+    for (const a of rawAttachments) {
+      if (!a || typeof a !== "object") continue;
+      const name = typeof a.name === "string" ? a.name : "attachment";
+      const type = typeof a.type === "string" ? a.type.toUpperCase() : "FILE";
+      const content =
+        typeof (a as Record<string, unknown>).content === "string"
+          ? ((a as Record<string, unknown>).content as string)
+          : "";
+      attachmentNames.push(name);
+      if (content) {
+        const remaining = Math.max(0, ATTACHMENTS_MAX_CHARS - used);
+        if (remaining > 0) {
+          const slice = content.slice(0, remaining);
+          parts.push(`${type}: ${name}\n${slice}`);
+          used += slice.length;
+        } else {
+          parts.push(`${type}: ${name}\n[content omitted due to size]`);
+        }
+      } else {
+        parts.push(`${type}: ${name}`);
+      }
+    }
+    const attachmentsBlock =
+      parts.length > 0 ? `\n\nATTACHMENTS:\n${parts.join("\n\n")}` : "";
+    const combinedText =
+      (typeof text === "string" ? text : "") + attachmentsBlock;
+
+    if (DEBUG) {
+      console.debug("Refine payload preview", {
+        templateId,
+        categoryUsed,
+        textPreview: combinedText.slice(0, 400),
+        attachments:
+          attachmentNames.length > 0
+            ? attachmentNames.map((n) => ({ name: n }))
+            : [],
+      });
+    }
+
     const engine = new RefineEngine({
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      apiKey: process.env.OPENROUTER_API_KEY as string,
       maxInputChars: MAX_INPUT_CHARS,
       debug: DEBUG,
     });
 
     const refineRequest: RefineRequest = {
-      text,
+      text: combinedText,
       templateId,
       category: categoryUsed,
       modelStyle: typeof modelStyle === "string" ? modelStyle : undefined,
+      userPlan: userPlanKey,
+      abTestVariant: process.env.AB_TEST_ALT === "true" ? "alt" : "control",
+      attachments: attachmentNames.length
+        ? { files: attachmentNames }
+        : undefined,
     };
 
     const result = await engine.refine(refineRequest);
@@ -247,7 +310,7 @@ export async function POST(req: NextRequest) {
           source: typeof source === "string" ? source : null,
           category: categoryUsed,
           templateId: templateId,
-          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+          model: "openrouter",
           modelStyle: typeof modelStyle === "string" ? modelStyle : null,
           latencyMs,
           status: "success",
@@ -287,7 +350,7 @@ export async function POST(req: NextRequest) {
           source: null,
           category: null,
           templateId: null,
-          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+          model: "openrouter",
           modelStyle: null,
           latencyMs: null,
           status: "error_internal",

@@ -36,6 +36,52 @@ Critical rules:
 `.trim();
 
 /**
+ * Task Hierarchy Rules
+ *
+ * CRITICAL: These rules prevent the refinement model from confusing the user's
+ * actual task with example text or internal content from appended reference docs.
+ *
+ * ROOT CAUSE OF PAST FAILURES:
+ * User says: "Make an X post about Orbitar. Below is the philosophy: [Orbitar philosophy with internal examples like 'Your goal is to produce a production-ready implementation plan...']"
+ * Bad behavior: Model saw the example text inside the philosophy and treated IT as the main task
+ * Result: Output about "implementation plans" instead of "X post about Orbitar"
+ */
+export const TASK_HIERARCHY_RULES = `
+TASK HIERARCHY RULES (critical - read this first):
+
+The user's input has TWO distinct parts you must identify:
+
+1. TOP-LEVEL INSTRUCTION (the actual task)
+   - This is the user's natural language request, typically at the START of their input
+   - Examples: "Make an X post about...", "Write a blog post on...", "Debug this bug..."
+   - This defines WHAT YOU ARE BEING ASKED TO DO
+   - Markers that END the instruction: "Below is...", "Here is...", "Here's the...", "The following is...", "Notes:", "Spec:", "Philosophy:", "Context:", "---"
+
+2. REFERENCE DOCUMENTS (context to mine, NOT the task)
+   - Everything after the marker is SUPPORTING MATERIAL
+   - These docs may contain internal examples, sample prompts, or template text
+   - DO NOT treat example text inside these docs as your main task
+   - Example of WRONG thinking: seeing "Your goal is to produce a production-ready implementation plan" inside a philosophy doc and making THAT the task
+
+HOW TO USE THIS:
+- The TOP-LEVEL INSTRUCTION defines the core task (e.g., "X post about Orbitar")
+- The REFERENCE DOCUMENTS provide context/content to embed (e.g., Orbitar's philosophy, key concepts, slogans)
+- Your refined prompt must accomplish the TOP-LEVEL INSTRUCTION while using REFERENCE DOCUMENTS as source material
+
+CONCRETE EXAMPLE:
+User input: "Make an X post that will go viral about Orbitar. Below is the philosophy: [long doc with internal examples...]"
+
+CORRECT parsing:
+- Task: Write a viral X post about Orbitar
+- Reference material: The philosophy doc (mine it for key concepts like "10-second bar", "prompts as products", etc.)
+
+WRONG parsing:
+- Seeing "Your goal is to produce a production-ready implementation plan" inside the doc and making the task about implementation plans
+
+The refined prompt MUST be about the TOP-LEVEL INSTRUCTION, using reference docs only as input context.
+`.trim();
+
+/**
  * User Priority Rules
  *
  * These rules ensure user instructions and content take precedence over
@@ -45,27 +91,58 @@ Critical rules:
 export const USER_PRIORITY_RULES = `
 USER PRIORITY RULES (non-negotiable):
 
-1. USER SUBJECT IS PRIMARY
-   - The subject/topic of the refined prompt MUST come from the user's notes, not from template defaults
+1. USER'S TOP-LEVEL INSTRUCTION IS THE TASK
+   - The first sentence(s) before any "Below is..." or "Here's the..." marker define the actual task
+   - Everything after such markers is REFERENCE MATERIAL, not the task itself
+   - Example: "Make an X post about Orbitar. Below is the philosophy:" → Task is "X post about Orbitar", philosophy is context
+
+2. USER SUBJECT IS PRIMARY
+   - The subject/topic of the refined prompt MUST come from the user's top-level instruction and notes, not from template defaults
    - If the user writes about "Orbitar" or "my product" or "company X", the refined prompt must be ABOUT that subject
    - Never replace a user-provided subject with generic placeholders like "product", "landing page", "content", etc.
    - Product names, brand names, and central concepts that appear in the user's notes are NON-NEGOTIABLE ANCHORS
 
-2. USER OUTPUT TYPE OVERRIDES TEMPLATE DEFAULTS
-   - If the user explicitly requests a specific output type (e.g., "single X post" vs "thread", "short summary" vs "detailed article"), that request OVERRIDES the template's default format
+3. DO NOT CONFUSE EXAMPLES INSIDE DOCS WITH THE MAIN TASK
+   - Reference documents may contain sample prompts, example goals, or template text
+   - These are INTERNAL TO THE DOC, not your task
+   - Example: A philosophy doc saying "Your goal is to produce a production-ready implementation plan" is describing Orbitar's internal behavior, NOT asking you to write about implementation plans
+
+4. USER OUTPUT TYPE OVERRIDES TEMPLATE DEFAULTS
+   - If the user explicitly requests a specific output type (e.g., "single X post" vs "thread"), that request OVERRIDES the template's default format
    - The template provides FORMAT GUIDANCE, not format mandates
-   - Example: If the template is "Twitter thread" but the user says "single clean X post", produce a prompt for a SINGLE POST
 
-3. KEY CONCEPTS MUST SURVIVE
-   - Identify repeated phrases, named concepts, and principle-like statements in the user's notes
-   - These MUST appear in the refined prompt in recognizable form
-   - Examples: "10-second bar", "prompts as products", "restructure vs rewrite", specific feature names, quality standards
-   - Do not paraphrase these into generic abstractions
+5. KEY CONCEPTS MUST SURVIVE AS CONTENT
+   - Identify key phrases and concepts from reference docs: "10-second bar", "prompts as products", "laser-guided AI instructions"
+   - These must appear as EMBEDDED CONTEXT in your refined prompt, not just as references
+   - Include the actual definitions/explanations, not just the terms
 
-4. MAINTAIN INFORMATION DENSITY
-   - If the user provides rich, rule-like bullets or philosophy statements, carry their density into the refined prompt
-   - Do not compress a detailed spec/philosophy document into vague platitudes
-   - Reorganize and sharpen, but do not summarize away substance
+6. STYLE WORDS BECOME CONSTRAINTS
+   - If user says "viral", "controversial", "educational", "funny", etc., these are STYLE CONSTRAINTS
+   - Encode them explicitly in the refined prompt as tone/approach guidance
+`.trim();
+
+/**
+ * Task Execution Guard
+ *
+ * Prevents the refinement model from executing the user's task. The refine
+ * engine manufactures prompts; it does not produce the final deliverable.
+ */
+export const TASK_EXECUTION_GUARD = `
+TASK EXECUTION GUARD (mandatory):
+
+- Your output is ALWAYS a system prompt for a downstream model, NOT the answer to the user's task.
+- Never complete the task yourself (do NOT generate long lists, full emails/blog posts, large code outputs, full analyses, or complete deliverables).
+- Rewrite imperative user asks ("Give me X", "Write Y", "Generate Z") into downstream instructions ("Your goal is to generate X…", "Write Y…", "Produce Z…").
+- Small illustrative examples are allowed (e.g., 1–3 sample items or a short snippet) when they clarify intent, but they must not satisfy the user's request by themselves.
+
+Example (planet naming request):
+
+WRONG:
+- The refined prompt includes a 40-item list of planet/exoplanet names (this executes the task).
+
+RIGHT:
+- The refined prompt defines the role (naming assistant), goal (generate 30–50 name ideas), embeds the project context (parallel models CLI, voice mode, open-source, heavy comments, Gemini-inspired UI), constraints (real planet/exoplanet names allowed; avoid trademarks; style options), and an output contract (a list with short rationales).
+- It does not include the long list itself; it tells the downstream model to produce it.
 `.trim();
 
 /**
@@ -107,6 +184,10 @@ Therefore, your refined prompt MUST include all essential context the downstream
 5. USE LABELED PREFIXES FOR ATTACHMENTS
    - FILE: filename.ts, CODE: function/component, IMAGE: description, ERROR: message
    - Reference sources explicitly: "In api/routes/user.ts…", "From the error trace…"
+   - Mention files as named units in context bullets when relevant (e.g., "FILE: PHILOSOPHY.md — Orbitar prompt philosophy and Prompt Lab design")
+
+Example (attachments):
+- FILE: PHILOSOPHY.md — Orbitar prompt philosophy and Prompt Lab design (use it to anchor plans/decisions to the existing architecture and principles)
 `.trim();
 
 /**

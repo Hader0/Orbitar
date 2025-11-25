@@ -320,15 +320,15 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
   },
   writing_twitter_thread: {
     baseRole:
-      "a skilled social media writer who creates compelling X/Twitter content about the subject provided by the user",
+      "a social content strategist and viral X/Twitter writer who understands platform dynamics, attention psychology, and concise persuasive storytelling",
     goalType:
-      "write X/Twitter content (thread OR single post, depending on user request) about the user's specified topic",
+      "write X/Twitter content (thread OR single post, depending on user request) about the subject defined in the user's TOP-LEVEL INSTRUCTION",
     contextHints:
-      "Preserve the user's subject matter, key concepts, product/brand names, and any hooks or CTAs mentioned. If user says 'single post', produce a single post, not a thread.",
+      "CRITICAL: The user's top-level instruction (before 'Below is...', 'Here's the...') defines the subject. Reference docs are CONTEXT TO MINE, not the task. Preserve user's subject matter (e.g., 'Orbitar'), key concepts, slogans, product/brand names. If user says 'single post' or 'viral post', produce exactly that, not a thread. If user mentions style ('viral', 'controversial', 'educational'), encode it as explicit tone guidance.",
     outputHints:
-      "Default: numbered tweets, first hooks, last has CTA, each under 280 chars. BUT if user explicitly requests 'single post' or 'one tweet', produce exactly that instead. Content must be about user's subject.",
+      "Default: numbered tweets, first hooks, last has CTA, each under 280 chars. BUT if user requests 'single post'/'one tweet'/'viral post', produce exactly one tweet. ALWAYS include a Key ideas/Context block in the refined prompt with 3-5 actual concept definitions from user's reference docs. Audience should be explicit if inferable (developers, founders, etc.).",
     qualityRules:
-      "Punchy, scannable, no filler. Each tweet works standalone but connects to narrative. NEVER replace user's subject with generic topics. Key concepts from user notes (e.g., '10-second bar', 'prompts as products') MUST appear in output.",
+      "Punchy hook in first tweet/post. Scannable, no filler. NEVER replace user's subject (e.g., 'Orbitar') with generic topics. NEVER confuse example text inside reference docs with the main task. Key concepts like '10-second bar', 'prompts as products' must appear as EMBEDDED CONTENT with their definitions, not just as term references. Preserve strong slogans verbatim: 'transforms messy user intent into laser-guided AI instructions'.",
   },
   writing_linkedin_post: {
     baseRole:
@@ -481,14 +481,15 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
   // General behavior
   general_general: {
     baseRole:
-      "an expert assistant who adapts to the specific domain and task at hand",
-    goalType: "accomplish the user's goal effectively",
+      "a prompt designer who manufactures reusable, domain-agnostic system prompts (never the final answers)",
+    goalType:
+      "produce a self-contained system prompt that directs a downstream model to accomplish the user's goal",
     contextHints:
-      "Infer the domain and task type. Preserve domain-specific terminology and constraints.",
+      "Infer domain and task type from the user's top-level instruction; mine appended documents for key concepts. Always embed a short 'Context' block (3–10 bullets) with actual content the downstream model must see.",
     outputHints:
-      "Adapt output format to the inferred task. Be explicit about expected deliverable.",
+      "Define role, goal, constraints, and a concrete output contract for the downstream model (format, sections, length bounds). If the user asks 'Give me X' / 'Write Y' / 'Generate Z', rewrite that as the downstream model's goal and specify the deliverable precisely.",
     qualityRules:
-      "Apply relevant domain best practices. Be concrete and actionable. No generic fluff.",
+      "NEVER perform the task yourself (no long lists, full articles/emails, or large code). Small illustrative examples (1–3 items/snippets) allowed only to clarify intent and must not satisfy the request. On minimal-input tasks (e.g., only a topic), do NOT invent domain-specific facts or statistics in the Context block—express structure (audience, tone, sections or topics to cover) rather than factual claims the user did not provide. Quality fail if the refined prompt contains a full answer that fulfills the user's ask.",
   },
 };
 
@@ -542,7 +543,7 @@ export function getCategoryDefaultTemplate(
 // Template Classification
 // ============================================================================
 
-const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
 const ENABLE_LLM_CLASSIFIER = process.env.ENABLE_LLM_CLASSIFIER === "true";
 
 /**
