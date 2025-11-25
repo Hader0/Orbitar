@@ -1,4 +1,15 @@
+/**
+ * Orbitar Template Registry
+ *
+ * Strongly typed template definitions with behavioral configuration.
+ * Templates are behavior presets, not visible output forms.
+ */
+
 import OpenAI from "openai";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type TemplateCategory =
   | "coding"
@@ -10,6 +21,8 @@ export type TemplateCategory =
   | "general";
 
 export type PlanName = "free" | "builder" | "pro";
+
+export type TemplateStatus = "lab" | "experimental" | "beta" | "ga";
 
 export type TemplateId =
   | "coding_feature"
@@ -34,156 +47,454 @@ export type TemplateId =
   | "creative_brainstorm"
   | "general_general";
 
-export const templateRegistry: Record<
-  TemplateId,
-  {
-    category: TemplateCategory;
-    label: string;
-    description: string;
-    status?: "ga" | "beta" | "experimental";
-    minPlan: PlanName;
-  }
-> = {
-  // coding
+/**
+ * Template metadata - visible to users and used for UI/API.
+ */
+export interface TemplateMetadata {
+  category: TemplateCategory;
+  label: string;
+  description: string;
+  status: TemplateStatus;
+  minPlan: PlanName;
+}
+
+/**
+ * Template behavioral config - used internally by the refine engine.
+ * Defines how this template should bias the refinement process.
+ */
+export interface TemplateBehavior {
+  /** The role the downstream model should assume */
+  baseRole: string;
+  /** Primary type of goal this template optimizes for */
+  goalType: string;
+  /** Hints about what context matters for this template */
+  contextHints?: string;
+  /** Expected output format for the downstream model */
+  outputHints?: string;
+  /** Domain-specific quality rules */
+  qualityRules?: string;
+}
+
+// ============================================================================
+// Template Registry
+// ============================================================================
+
+export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
+  // Coding templates
   coding_feature: {
     category: "coding",
     label: "Implement feature",
     description: "Help implement a new feature or component",
+    status: "ga",
     minPlan: "free",
   },
   coding_debug: {
     category: "coding",
     label: "Debug / fix bug",
     description: "Diagnose and fix defects",
+    status: "ga",
     minPlan: "free",
   },
   coding_refactor: {
     category: "coding",
     label: "Refactor / improve",
     description: "Refactor for readability, performance, or maintainability",
+    status: "ga",
     minPlan: "builder",
   },
   coding_tests: {
     category: "coding",
     label: "Write tests",
     description: "Create unit/integration tests",
+    status: "ga",
     minPlan: "builder",
   },
   coding_explain: {
     category: "coding",
     label: "Explain code",
     description: "Explain what code does and why",
+    status: "ga",
     minPlan: "free",
   },
 
-  // writing
+  // Writing templates
   writing_blog: {
     category: "writing",
     label: "Blog post",
     description: "Draft a blog post with outline-first approach",
+    status: "ga",
     minPlan: "free",
   },
   writing_twitter_thread: {
     category: "writing",
     label: "Twitter/X thread",
     description: "Compose a concise thread",
+    status: "ga",
     minPlan: "free",
   },
   writing_linkedin_post: {
     category: "writing",
     label: "LinkedIn post",
     description: "Professional short-form writing",
+    status: "ga",
     minPlan: "free",
   },
   writing_email: {
     category: "writing",
     label: "Email",
     description: "Draft a clear email with purpose and tone",
+    status: "ga",
     minPlan: "free",
   },
   writing_landing_page: {
     category: "writing",
     label: "Landing page copy",
     description: "Persuasive page content with structure",
+    status: "ga",
     minPlan: "builder",
   },
 
-  // research
+  // Research templates
   research_summarize: {
     category: "research",
     label: "Summarize",
     description: "Structured summaries for skimmability",
+    status: "ga",
     minPlan: "free",
   },
   research_compare: {
     category: "research",
     label: "Compare options",
     description: "Pros/cons comparison and recommendation",
+    status: "ga",
     minPlan: "builder",
   },
   research_extract_points: {
     category: "research",
     label: "Extract key points",
     description: "Pull out bullets, facts, and action items",
+    status: "ga",
     minPlan: "free",
   },
 
-  // planning
+  // Planning templates
   planning_roadmap: {
     category: "planning",
     label: "Roadmap / plan",
     description: "Milestones, scope, risks, dependencies",
+    status: "ga",
     minPlan: "free",
   },
   planning_feature_spec: {
     category: "planning",
     label: "Feature spec",
     description: "Structured specification for a feature",
+    status: "ga",
     minPlan: "builder",
   },
   planning_meeting_notes: {
     category: "planning",
     label: "Meeting notes",
     description: "Action items, owners, blockers, follow-ups",
+    status: "ga",
     minPlan: "free",
   },
 
-  // communication
+  // Communication templates
   communication_reply: {
     category: "communication",
     label: "Reply",
     description: "Draft a response with desired tone",
+    status: "ga",
     minPlan: "free",
   },
   communication_tone_adjust: {
     category: "communication",
     label: "Adjust tone",
     description: "Rewrite keeping content, change tone",
+    status: "ga",
     minPlan: "free",
   },
 
-  // creative
+  // Creative templates
   creative_story: {
     category: "creative",
     label: "Story / scene",
     description: "Narrative generation with constraints",
+    status: "ga",
     minPlan: "free",
   },
   creative_brainstorm: {
     category: "creative",
     label: "Brainstorm ideas",
     description: "Divergent idea generation",
+    status: "ga",
     minPlan: "free",
   },
 
-  // general
+  // General templates
   general_general: {
     category: "general",
     label: "General prompt",
     description: "Default general-purpose prompting",
+    status: "ga",
     minPlan: "free",
   },
 };
+
+// ============================================================================
+// Template Behaviors
+// ============================================================================
+
+const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
+  // Coding behaviors
+  coding_feature: {
+    baseRole:
+      "a senior software engineer who writes clean, maintainable, production-ready code",
+    goalType: "implement a new feature or component",
+    contextHints:
+      "Preserve file paths, function names, component names, API signatures, and tech stack details",
+    outputHints:
+      "Expect working code with clear file structure, comments where non-obvious, and consideration of edge cases",
+    qualityRules:
+      "Code should be idiomatic for the specified language/framework. Include error handling. Consider testability.",
+  },
+  coding_debug: {
+    baseRole:
+      "a senior debugging specialist who systematically diagnoses and fixes issues",
+    goalType: "diagnose and fix a bug or error",
+    contextHints:
+      "Preserve error messages, stack traces, file names, line numbers, and reproduction steps verbatim",
+    outputHints:
+      "Provide root cause analysis, the fix, and verification steps. Include code changes as diffs or complete files.",
+    qualityRules:
+      "Explain the root cause. Propose minimal, targeted fixes. Avoid introducing new issues.",
+  },
+  coding_refactor: {
+    baseRole:
+      "a senior engineer focused on code quality, readability, and maintainability",
+    goalType: "refactor code for better structure, performance, or clarity",
+    contextHints:
+      "Preserve existing behavior contracts and API surfaces unless explicitly changing them",
+    outputHints:
+      "Provide refactored code with explanations of what changed and why. Preserve tests or update them.",
+    qualityRules:
+      "Maintain backward compatibility unless told otherwise. Improve without over-engineering.",
+  },
+  coding_tests: {
+    baseRole:
+      "a test engineer who writes comprehensive, maintainable test suites",
+    goalType: "write tests for code",
+    contextHints:
+      "Preserve function signatures, expected behaviors, and edge cases from the source code",
+    outputHints:
+      "Provide complete test files with clear test names, setup, assertions, and edge case coverage",
+    qualityRules:
+      "Tests should be isolated, fast, and deterministic. Cover happy paths and edge cases.",
+  },
+  coding_explain: {
+    baseRole:
+      "a senior engineer who explains complex code clearly to developers of varying levels",
+    goalType: "explain what code does and how it works",
+    contextHints:
+      "Preserve code structure and key implementation details for reference",
+    outputHints:
+      "Provide clear explanations with sections for overview, key components, and important details",
+    qualityRules:
+      "Explain the 'why' not just the 'what'. Use concrete examples. Adapt depth to audience.",
+  },
+
+  // Writing behaviors
+  // NOTE: All writing templates define FORMAT and STYLE guidance.
+  // The SUBJECT always comes from the user's notes—never replace user subject with generic topics.
+  writing_blog: {
+    baseRole:
+      "a skilled technical or content writer who creates engaging, well-structured articles about the subject provided by the user",
+    goalType: "write a blog post or article about the user's specified topic",
+    contextHints:
+      "Preserve the user's subject matter, key messages, examples, and audience context. Note any SEO or formatting requirements. The topic MUST come from user notes.",
+    outputHints:
+      "First outline, then draft. Include intro, body sections, and conclusion. Specify word count if given. The content must be about the user's subject.",
+    qualityRules:
+      "No fluff. Use concrete examples from the user's notes. Match specified tone. Hook the reader early. Never replace user's subject with generic topics.",
+  },
+  writing_twitter_thread: {
+    baseRole:
+      "a skilled social media writer who creates compelling X/Twitter content about the subject provided by the user",
+    goalType:
+      "write X/Twitter content (thread OR single post, depending on user request) about the user's specified topic",
+    contextHints:
+      "Preserve the user's subject matter, key concepts, product/brand names, and any hooks or CTAs mentioned. If user says 'single post', produce a single post, not a thread.",
+    outputHints:
+      "Default: numbered tweets, first hooks, last has CTA, each under 280 chars. BUT if user explicitly requests 'single post' or 'one tweet', produce exactly that instead. Content must be about user's subject.",
+    qualityRules:
+      "Punchy, scannable, no filler. Each tweet works standalone but connects to narrative. NEVER replace user's subject with generic topics. Key concepts from user notes (e.g., '10-second bar', 'prompts as products') MUST appear in output.",
+  },
+  writing_linkedin_post: {
+    baseRole:
+      "a professional content creator who writes engaging LinkedIn content about the subject provided by the user",
+    goalType: "write a LinkedIn post about the user's specified topic",
+    contextHints:
+      "Preserve the user's subject matter, professional context, key achievements or insights, and audience details. Never substitute user's topic with generic business content.",
+    outputHints:
+      "Hook in first line. Use line breaks for readability. End with engagement prompt or CTA. Content must be about user's subject.",
+    qualityRules:
+      "Professional but human. Avoid corporate jargon. Value-first, promotion-second. NEVER replace user's subject with generic topics.",
+  },
+  writing_email: {
+    baseRole:
+      "a clear, effective communicator who writes emails that get results",
+    goalType: "write an email about the user's specified purpose",
+    contextHints:
+      "Preserve recipient context, relationship, purpose, and any constraints on tone or length. The email subject/purpose comes from user notes.",
+    outputHints:
+      "Subject line, greeting, body with clear ask, professional close. Note formality level. Content must address user's specified purpose.",
+    qualityRules:
+      "Clear purpose in first paragraph. One clear ask. Easy to skim. Appropriate formality. Never substitute user's topic.",
+  },
+  writing_landing_page: {
+    baseRole:
+      "a conversion-focused copywriter who writes persuasive landing pages for the product/service specified by the user",
+    goalType:
+      "write landing page copy for the user's specified product/service",
+    contextHints:
+      "Preserve the user's product/service name and details, target audience, key benefits, and any brand voice guidelines. NEVER replace with generic 'product' or 'service'.",
+    outputHints:
+      "Hero headline + subhead, problem/solution sections, features/benefits, social proof, CTA. All content must be about the user's specified product/service.",
+    qualityRules:
+      "Benefits over features. Clear value prop in 5 seconds. Strong CTA. Address objections. NEVER substitute user's product name with generic placeholders.",
+  },
+
+  // Research behaviors
+  research_summarize: {
+    baseRole:
+      "a research analyst who distills complex information into clear summaries",
+    goalType: "summarize content for quick understanding",
+    contextHints:
+      "Preserve source attribution and key data points. Note summary purpose (decision, learning, sharing)",
+    outputHints:
+      "Executive summary followed by key points as bullets. Include takeaways and action items if relevant.",
+    qualityRules:
+      "Accuracy first. Preserve nuance on important points. Make it skimmable.",
+  },
+  research_compare: {
+    baseRole:
+      "an analyst who objectively evaluates options and provides recommendations",
+    goalType: "compare options and provide a recommendation",
+    contextHints:
+      "Preserve all options being compared, evaluation criteria, and any constraints",
+    outputHints:
+      "Comparison table or structured breakdown. Pros/cons for each. Clear recommendation with rationale.",
+    qualityRules:
+      "Fair comparison. Acknowledge trade-offs. Recommendation should match stated criteria.",
+  },
+  research_extract_points: {
+    baseRole:
+      "a detail-oriented analyst who extracts actionable information from content",
+    goalType: "extract key points, facts, and action items",
+    contextHints:
+      "Preserve source context and what types of points to prioritize (facts, decisions, action items)",
+    outputHints:
+      "Categorized bullet lists: key facts, decisions made, action items with owners, open questions",
+    qualityRules:
+      "Be comprehensive but not redundant. Attribute claims. Highlight uncertainties.",
+  },
+
+  // Planning behaviors
+  planning_roadmap: {
+    baseRole: "a project lead who creates clear, actionable project plans",
+    goalType: "create a roadmap or project plan",
+    contextHints:
+      "Preserve scope, timeline constraints, dependencies, and any existing milestones",
+    outputHints:
+      "Phases with milestones, key deliverables, dependencies, risks, and success criteria",
+    qualityRules:
+      "Realistic timelines. Clear ownership. Explicit dependencies. Acknowledge risks.",
+  },
+  planning_feature_spec: {
+    baseRole:
+      "a product manager who writes clear, complete feature specifications",
+    goalType: "write a feature specification",
+    contextHints:
+      "Preserve user stories, requirements, constraints, and any technical considerations",
+    outputHints:
+      "Problem statement, proposed solution, requirements (functional + non-functional), acceptance criteria, out of scope",
+    qualityRules:
+      "Testable acceptance criteria. Clear scope boundaries. Consider edge cases.",
+  },
+  planning_meeting_notes: {
+    baseRole:
+      "an organized professional who captures meetings clearly and completely",
+    goalType: "create structured meeting notes",
+    contextHints:
+      "Preserve attendees, decisions made, action items, and any blockers discussed",
+    outputHints:
+      "Attendees, agenda items discussed, decisions made, action items (who/what/when), follow-ups",
+    qualityRules:
+      "Action items must have owners and deadlines. Decisions should have rationale. Be concise.",
+  },
+
+  // Communication behaviors
+  communication_reply: {
+    baseRole: "a thoughtful communicator who crafts appropriate responses",
+    goalType: "draft a reply to a message",
+    contextHints:
+      "Preserve the original message context, relationship, and any specific points to address",
+    outputHints:
+      "Reply that addresses all points raised. Match appropriate tone and length.",
+    qualityRules:
+      "Address all points. Appropriate formality. Clear next steps if applicable.",
+  },
+  communication_tone_adjust: {
+    baseRole: "a skilled editor who adjusts tone while preserving meaning",
+    goalType: "rewrite content with a different tone",
+    contextHints:
+      "Preserve the core message and all key information. Note target tone clearly.",
+    outputHints:
+      "Rewritten content with the new tone. Same information, different delivery.",
+    qualityRules:
+      "Don't lose information. Match target tone consistently. Preserve intent.",
+  },
+
+  // Creative behaviors
+  creative_story: {
+    baseRole: "a creative writer who crafts engaging narratives",
+    goalType: "write a story, scene, or narrative content",
+    contextHints:
+      "Preserve character details, setting, plot points, and any style/genre constraints",
+    outputHints:
+      "Narrative prose following the specified format (scene, chapter, short story, etc.)",
+    qualityRules:
+      "Show don't tell. Consistent voice. Respect genre conventions. Honor creative constraints.",
+  },
+  creative_brainstorm: {
+    baseRole: "a creative strategist who generates diverse, innovative ideas",
+    goalType: "brainstorm ideas or concepts",
+    contextHints:
+      "Preserve the problem space, constraints, and any direction for the ideas",
+    outputHints:
+      "List of distinct ideas with brief descriptions. Variety in approach and feasibility.",
+    qualityRules:
+      "Quantity and variety. Include obvious and non-obvious ideas. Brief 'why it could work' for each.",
+  },
+
+  // General behavior
+  general_general: {
+    baseRole:
+      "an expert assistant who adapts to the specific domain and task at hand",
+    goalType: "accomplish the user's goal effectively",
+    contextHints:
+      "Infer the domain and task type. Preserve domain-specific terminology and constraints.",
+    outputHints:
+      "Adapt output format to the inferred task. Be explicit about expected deliverable.",
+    qualityRules:
+      "Apply relevant domain best practices. Be concrete and actionable. No generic fluff.",
+  },
+};
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
 export function isTemplateId(
   value: string | undefined | null
@@ -191,206 +502,47 @@ export function isTemplateId(
   return !!value && (value as TemplateId) in templateRegistry;
 }
 
-export function getTemplateGuidance(templateId?: TemplateId): string {
-  const id = templateId || "general_general";
-  if (id.startsWith("coding_")) {
-    return `
-Prioritize coding clarity:
-- Specify language, framework, versions, and environment.
-- Focus on final code; only minimal explanation if needed.
-- Include acceptance criteria, edge cases, and test expectations.
-- Map requirements to concrete files, functions, or components.
-`.trim();
-  }
-  if (id.startsWith("writing_")) {
-    return `
-Prioritize long-form quality:
-- Clarify audience and tone (beginner/expert, casual/formal).
-- Draft an outline first, then the full piece following it.
-- Enforce style constraints (no fluff, concrete examples, clear structure).
-`.trim();
-  }
-  if (id.startsWith("research_")) {
-    return `
-Prioritize summarization/analysis:
-- Clarify purpose (study notes, executive brief, technical recap).
-- Emphasize key points, trade-offs, action items, and risks.
-- Keep structure skimmable (bullets/headings).
-`.trim();
-  }
-  if (id.startsWith("planning_")) {
-    return `
-Prioritize planning/spec clarity:
-- Define scope, milestones, owners, risks, dependencies.
-- Provide checklists and clear acceptance criteria.
-- Keep structure actionable and concise.
-`.trim();
-  }
-  if (id.startsWith("communication_")) {
-    return `
-Prioritize communication intent and tone:
-- Respect constraints (audience, tone, brevity, key points).
-- Keep actionable, clear, and respectful of context.
-- Offer concise alternatives when suitable.
-`.trim();
-  }
-  if (id.startsWith("creative_")) {
-    return `
-Prioritize creative output:
-- Respect style, voice, constraints, and narrative rules.
-- Encourage variety and originality while staying on-brief.
-- Keep structure coherent and purposeful.
-`.trim();
-  }
-  // general
-  return `
-General guidance for all templates (especially General → General prompt):
-- Produce a final, copy‑pastable AI system prompt. Do not describe making a prompt.
-- Role and Goal are for the downstream model’s persona and optimization objective. Do not describe Orbitar and do not use or imply “prompt engineer”.
-- Hard bans: never use the phrase “prompt engineer”; never say “structured prompt”, “clear sections”, “relevant context”, or talk about “this prompt” or “the prompt” as an object.
-- Preserve key phrases and domain wording from the user’s input when they carry meaning; prefer re‑ordering, grouping, and sharpening over paraphrasing into abstractions.
-- Output format must describe the downstream model’s response shape (e.g., JSON keys, exact code/file contents, bullet lists), not the internal structure of the prompt.
-- When the input looks like a product philosophy/spec, embed the product definition and philosophy directly in Context, Constraints, and Quality rules using original language where it’s already strong.
-- Enforce Orbitar principles: 10‑second bar, prompts as products, models snap into frames, summarise‑before‑stuffing long context, explicit references (FILE:, CODE:, IMAGE:), attachments as named units, and explicit non‑goals/avoidances.
-- Return only the final prompt; no fences unless requested, no “Task:” checklists, no meta commentary.
-`.trim();
-}
-
-export function buildSystemContent(
-  modelStyle?: string,
-  templateId?: TemplateId
-): string {
-  const style = modelStyle || "a general-purpose LLM";
-  const templateLabel = templateId
-    ? templateRegistry[templateId]?.label ?? templateId
-    : "general";
-  return `
-You are Orbitar, a prompt optimization engine.
-
-Transform rough or underspecified text into a clear, structured, high-leverage prompt tailored to the target model and template.
-
-Context:
-- Target model style: ${style}
-- Template/goal: ${templateLabel}
-- The user will paste your output directly into that model.
-- Do not answer the prompt; only rewrite it.
-- Preserve the user's intent, constraints, and important details.
-
-Behavior:
-1) Infer intent and task type
-- Deduce the user's goal (e.g., debug code, write content, design an API, summarize).
-- Treat ${templateLabel} as the primary task type.
-
-2) Extract and preserve details
-- Keep domain details (APIs, functions, business logic, niche terms).
-- Preserve constraints (tone, length, audience, style, tools, libraries, tech stack).
-- Preserve examples, edge cases, and "don't do X" rules.
-- If ambiguous, add: "If any of this is unclear, ask the user to clarify X before proceeding."
-
-3) Rebuild as a high-quality prompt (direct instruction, not a conversation)
-Use this structure:
-- Role: [the model's role]
-- Goal: [the single desired outcome]
-- Context: [key background, constraints, examples]
-- Task: [step-by-step instructions]
-- Output format: [exact format, bullets/code blocks/JSON as needed]
-- Additional rules: [style, safety, what to avoid]
-Also:
-- Coding: specify language, framework, environment, files, expectations (comments/tests/error handling).
-- Writing: specify audience, tone, outline-first then draft, length/style constraints.
-- Summarization: specify purpose, depth, focus areas.
-- Planning/Communication/Creative: enforce intent-specific rules.
-
-4) Optimize for the target model style
-- Assume the model is ${style}.
-- Be explicit and unambiguous.
-- Keep instructions concise but precise; prefer bullet lists over long paragraphs.
-
-Output rules (critical)
-- Return only the final optimized prompt text.
-- No explanations, quotes, markdown fences, or commentary.
-
-${getTemplateGuidance(templateId)}
-`.trim();
+/**
+ * Get the behavioral configuration for a template.
+ */
+export function getTemplateBehavior(templateId: TemplateId): TemplateBehavior {
+  return templateBehaviors[templateId] || templateBehaviors.general_general;
 }
 
 /**
- * v1-lite prompt (short, fast). Encodes role, goal, context, task, output format.
+ * Get all templates for a given category.
  */
-export function buildSystemContentLite(
-  modelStyle?: string,
-  templateId?: TemplateId
-): string {
-  // NOTE: v1-lite system prompt used for fast, single-call refinement.
-  // The model must treat the user's text as source material to restructure and sharpen,
-  // preserving domain language where it's already strong and avoiding boilerplate.
-  const style = modelStyle || "a general-purpose LLM";
-  const templateLabel = templateId
-    ? templateRegistry[templateId]?.label ?? templateId
-    : "general";
-
-  // Manual test checklist (quick):
-  // - General → General with PHILOSOPHY.md: Role is product/domain-specific (not "prompt engineer").
-  //   Context/Constraints/Quality rules echo Orbitar principles (10-second bar, prompts as products,
-  //   models snap into frames, summarise-before-stuffing, explicit references FILE/CODE/IMAGE).
-  //   Output format is concrete (e.g., JSON keys, code file contents), never meta about "structured prompt".
-  // - Coding templates: preserves API/function/component names, stack, versions, and error messages.
-  // - Writing templates: preserves audience/key messages; Output format is concrete (word count, sections).
-
-  return `
-You are Orbitar. Convert rough notes/specs into a high‑signal system prompt for a downstream model.
-Target model style: ${style}
-Template/goal: ${templateLabel}
-
-Core behavior:
-- Treat the user's text as authoritative source material. Do not summarize generically.
-- Preserve domain details and original wording when it already carries meaning.
-- Prefer re‑ordering, grouping, naming, and sharpening over paraphrasing into abstractions.
-- Speak directly to the downstream model (second person “You …”). Do not mention “this prompt”.
-- Hard bans: never use the phrase “prompt engineer”; do not say “structured prompt”, “clear sections”, or “relevant context”.
-- Output format must define the downstream model’s response shape (JSON keys, exact file contents, bullet list types), not the internal prompt structure.
-- Follow Orbitar principles: 10‑second bar; prompts as products; strong spine so models snap into frames; summarise‑before‑stuffing; explicit references to inputs (FILE:, CODE:, IMAGE:, ERROR:); attachments as named units.
-
-Few‑shot sketches (compact):
-
-Example A — Rough product notes → product‑aware system prompt
-Input notes (abridged):
-- Orbitar refines messy user text into high‑quality AI prompts.
-- Output must be obviously better than what a human could write in 10 seconds.
-- Treat prompts as products; consistent frames beat one‑off strings.
-
-Desired output skeleton (the model will emit this for its own target domain):
-- Role: You are Orbitar, an inline prompt‑refinement engine that restructures user notes into high‑leverage instructions.
-- Goal: Produce reusable system prompts that set a consistent, high‑quality behavior frame.
-- Context: Keep key phrases (“10‑second bar”, “prompts as products”, “models snap into frames”).
-- Constraints: Preserve domain terms verbatim where strong; restructure instead of paraphrasing; reference inputs explicitly.
-- Output format: When this system prompt is used, the downstream model responds with a single, copy-pastable answer per request (no code fences, no meta commentary). If a specific response structure is required (e.g., JSON schema, Markdown sections), describe that structure explicitly here.
-- Quality rules: No hallucinations; embed only facts from input; outputs must clear the 10‑second bar.
-
-Example B — Preserve and sharpen bullets
-Input bullets:
-- Users upload CODE: api/routes/user.ts and ERROR: PrismaClientKnownRequestError P2002
-- Stack: Next.js 14, Prisma 5.12.1, Postgres 15
-
-Keep as:
-- Context: CODE: api/routes/user.ts; ERROR: PrismaClientKnownRequestError P2002; Stack: Next.js 14, Prisma 5.12.1, Postgres 15
-- Constraints: Do not change DB schema; propose idempotent migration; include repro steps.
-
-Your output must always be a single, copy‑pastable system prompt using this scaffold:
-- Role: …
-- Goal: …
-- Context: …
-- Constraints: …
-- Output format: …
-- Quality rules: …
-
-Within that scaffold, the "Output format" line must describe how the downstream model should structure its responses (JSON/Markdown/etc.), and must not talk about this prompt, blocks, sections, or the scaffold itself.
-
-${getTemplateGuidance(templateId)}
-`.trim();
+export function getTemplatesForCategory(
+  category: TemplateCategory
+): Array<{ id: TemplateId; metadata: TemplateMetadata }> {
+  return (Object.entries(templateRegistry) as [TemplateId, TemplateMetadata][])
+    .filter(([, meta]) => meta.category === category)
+    .map(([id, metadata]) => ({ id, metadata }));
 }
 
-const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-5-mini";
+/**
+ * Map a category to its default template ID.
+ */
+export function getCategoryDefaultTemplate(
+  category: TemplateCategory
+): TemplateId {
+  const defaults: Record<TemplateCategory, TemplateId> = {
+    coding: "coding_feature",
+    writing: "writing_blog",
+    research: "research_summarize",
+    planning: "planning_roadmap",
+    communication: "communication_reply",
+    creative: "creative_brainstorm",
+    general: "general_general",
+  };
+  return defaults[category] || "general_general";
+}
+
+// ============================================================================
+// Template Classification
+// ============================================================================
+
+const DEFAULT_MODEL: string = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const ENABLE_LLM_CLASSIFIER = process.env.ENABLE_LLM_CLASSIFIER === "true";
 
 /**
@@ -638,7 +790,7 @@ Guidance:
       max_tokens: 128,
     });
     const content = completion.choices[0]?.message?.content || "";
-    let parsed: any = null;
+    let parsed: unknown = null;
     try {
       parsed = JSON.parse(content);
     } catch {
@@ -654,9 +806,12 @@ Guidance:
     let templateId: TemplateId = "general_general";
     let confidence = 0.5;
     if (parsed && typeof parsed === "object") {
-      if (isTemplateId(parsed.templateId)) templateId = parsed.templateId;
-      if (typeof parsed.confidence === "number") {
-        confidence = Math.max(0, Math.min(1, parsed.confidence));
+      const p = parsed as Record<string, unknown>;
+      if (isTemplateId(p.templateId as string)) {
+        templateId = p.templateId as TemplateId;
+      }
+      if (typeof p.confidence === "number") {
+        confidence = Math.max(0, Math.min(1, p.confidence));
       }
     }
 
@@ -669,4 +824,74 @@ Guidance:
       confidence: 0.5,
     };
   }
+}
+
+// ============================================================================
+// Legacy Exports (for backward compatibility)
+// ============================================================================
+
+/**
+ * @deprecated Use getTemplateBehavior and buildRefineSystemPrompt instead.
+ * Kept for backward compatibility during migration.
+ */
+export function getTemplateGuidance(templateId?: TemplateId): string {
+  const id = templateId || "general_general";
+  const behavior = getTemplateBehavior(id);
+
+  return `
+Template: ${templateRegistry[id].label}
+Role: ${behavior.baseRole}
+Goal type: ${behavior.goalType}
+${behavior.contextHints ? `Context hints: ${behavior.contextHints}` : ""}
+${behavior.outputHints ? `Output hints: ${behavior.outputHints}` : ""}
+${behavior.qualityRules ? `Quality rules: ${behavior.qualityRules}` : ""}
+`.trim();
+}
+
+/**
+ * @deprecated Use buildRefineSystemPrompt from refine-engine.ts instead.
+ * Kept for backward compatibility during migration.
+ */
+export function buildSystemContent(
+  modelStyle?: string,
+  templateId?: TemplateId
+): string {
+  const id = templateId || "general_general";
+  const style = modelStyle || "a general-purpose LLM";
+  const template = templateRegistry[id];
+  const behavior = getTemplateBehavior(id);
+
+  return `
+You are Orbitar. Transform rough notes into a polished system prompt for ${style}.
+
+Template: ${template.label}
+Base role: ${behavior.baseRole}
+Goal: ${behavior.goalType}
+
+Your output is the final prompt text. It must:
+- Define a clear role/perspective for the downstream model
+- State the goal explicitly
+- Present context compactly
+- State constraints clearly
+- Define expected output format
+- Include quality criteria
+
+Critical rules:
+- Write directly to the downstream model ("You are…")
+- Never mention "this prompt", "template", or "scaffold"
+- Never use visible schema labels like "Role:", "Goal:", etc.
+- Preserve domain terms and specific details
+
+Return only the final prompt text.
+`.trim();
+}
+
+/**
+ * @deprecated Use buildRefineSystemPrompt from refine-engine.ts instead.
+ */
+export function buildSystemContentLite(
+  modelStyle?: string,
+  templateId?: TemplateId
+): string {
+  return buildSystemContent(modelStyle, templateId);
 }
