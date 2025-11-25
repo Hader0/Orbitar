@@ -26,8 +26,11 @@ model User {
 
   allowDataUse      Boolean   @default(false)
   defaultIncognito  Boolean   @default(false)
+  promptLabOptIn    Boolean   @default(false)
 
   promptEvents      PromptEvent[]
+  refineEvents      RefineEvent[]
+
   templatePreferences UserTemplatePreference[]
 
   createdAt DateTime @default(now())
@@ -107,4 +110,103 @@ model UserTemplatePreference {
   enabled    Boolean @default(true)
 
   @@unique([userId, templateId])
+}
+
+model RefineEvent {
+  id                 String     @id @default(cuid())
+  createdAt          DateTime   @default(now())
+
+  user               User?      @relation(fields: [userId], references: [id])
+  userId             String?
+
+  plan               String
+  category           String
+  templateId         String
+  templateVersion    String
+
+  rawTextLength      Int
+  refinedTextLength  Int
+
+  acceptedAt         DateTime?
+  reverted           Boolean    @default(false)
+  // Allowed values: "none" | "light" | "heavy"
+  editDistanceBucket String?
+
+  promptLabOptIn     Boolean    @default(false)
+  isIncognito        Boolean    @default(false)
+
+  promptSamples      PromptSample[]
+
+  @@map("refine_events")
+}
+
+//
+// Prompt Lab core tables (schema only)
+//
+
+model SyntheticTask {
+  id         String   @id @default(cuid())
+  category   String   // e.g. "coding" | "writing" | ...
+  inputText  String
+  difficulty String?  // optional, e.g. "easy" | "medium" | "hard"
+  tags       String?  // JSON string (SQLite lacks native Json)
+
+  createdAt  DateTime @default(now())
+  labRuns    LabRun[]
+}
+
+model PromptSample {
+  id              String       @id @default(cuid())
+  refineEventId   String?
+  refineEvent     RefineEvent? @relation(fields: [refineEventId], references: [id])
+
+  source          String       // e.g. "user_opt_in" | "internal" | "other"
+  category        String
+  rawText         String
+  refinedText     String?
+  plan            String
+  templateSlug    String?
+  templateVersion String?
+
+  createdAt       DateTime     @default(now())
+
+  labRuns         LabRun[]
+}
+
+model LabRun {
+  id               String         @id @default(cuid())
+  templateSlug     String
+  templateVersion  String
+  taskType         String         // "synthetic" | "sample"
+
+  syntheticTaskId  String?
+  syntheticTask    SyntheticTask? @relation(fields: [syntheticTaskId], references: [id])
+
+  promptSampleId   String?
+  promptSample     PromptSample?  @relation(fields: [promptSampleId], references: [id])
+
+  modelName        String
+  status           String         // "pending" | "running" | "done" | "error"
+  errorMessage     String?
+
+  rawRefinedPrompt String?
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  scores           LabScore[]
+}
+
+model LabScore {
+  id             String  @id @default(cuid())
+  labRunId       String
+  labRun         LabRun  @relation(fields: [labRunId], references: [id])
+
+  structureScore Float?
+  contractScore  Float?
+  domainScore    Float?
+  overallScore   Float?
+  metricsJson    String?  // JSON string (SQLite lacks native Json)
+
+  createdAt      DateTime @default(now())
 }

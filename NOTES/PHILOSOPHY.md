@@ -1,429 +1,264 @@
-# Orbitar Prompt Philosophy
+# Orbitar Philosophy
 
-> **If Orbitar’s output isn’t obviously better than what the user could write in 10 seconds, we failed.**
-
-Orbitar is not a fancy text box. It’s a **prompt engine** whose job is to turn messy intent into **laser-guided instructions** for AI models.
-
-That means:
-
-- A “good” prompt is **not enough**.
-- Every refinement must feel **obviously superior** to what the user would have written themselves.
-- We treat prompts as **products**, not one-off strings.
-
-This document defines what that actually means in practice.
+> **Orbitar manufactures prompts that are structurally smarter, context-aware, and measurably more effective than anything the user could dash off themselves.**
 
 ---
 
-## 1. Non-Negotiable Promise: Obvious Upgrade, Every Time
+## In One Sentence
 
-**Definition of success for a single refinement:**
-
-> The user looks at Orbitar’s refined prompt and thinks:  
-> “I wouldn’t have written that. This is clearer, sharper, and more likely to work.”
-
-Concretely, an Orbitar refinement must:
-
-1. **Clarify the goal**
-
-   - Make the desired outcome explicit.
-   - Pull out implied requirements (edge cases, constraints, formats).
-
-2. **Surface and organize context**
-
-   - Identify which parts of the user’s text (and attachments) actually matter.
-   - Present that context in a structured way instead of dumping everything.
-
-3. **Enforce structure**
-
-   - Role → Goal → Context → Constraints → Output Format → Quality rules.
-   - Models should “snap into” a consistent frame, not improvise each time.
-
-4. **Constrain output**
-
-   - Clear formatting instructions (sections, JSON, markdown, code blocks).
-   - Guard rails against rambling, irrelevant output, or unsafe behavior.
-
-5. **Respect domain best practices**
-   - Coding templates follow solid engineering habits.
-   - Writing templates follow strong editorial structure.
-   - Research templates push for evidence, citations, and uncertainty handling.
-
-If a refined prompt is basically just “rewrite this more nicely,” that’s a **hard fail**.  
-Orbitar must _restructure_ the task, not just rephrase it.
+Orbitar is a prompt engine that transforms messy user intent into laser-guided AI instructions—every refinement must be an **obvious upgrade** over what the user could write in 10 seconds.
 
 ---
 
-## 2. The Orbitar Prompt Spec: What “Best Possible” Actually Contains
+## The Orbitar Prompt Contract
 
-Every serious Orbitar template should implicitly or explicitly cover:
+Every refined prompt must contain these elements, presented naturally (not as visible schema labels):
 
-### 2.1 Role / Perspective
+### 1. Role / Perspective
 
-Examples:
+Define how the downstream model should think before responding:
 
-- “You are a senior full-stack engineer…”
-- “You are a ruthless editor focused on clarity and concision…”
-- “You are a research assistant prioritizing evidence and citations…”
+- "You are a senior full-stack engineer who writes production-ready code…"
+- "You are a ruthless editor focused on clarity and concision…"
+- "You are a research assistant prioritizing evidence and citations…"
 
-The role defines _how_ the model should think before it starts typing.
+### 2. Goal / Outcome
 
----
+A single, crisp statement of the desired result:
 
-### 2.2 Goal / Outcome
+- "Your goal is to produce a production-ready implementation plan for…"
+- "Your goal is to refactor this code for readability and testability…"
+- "Your goal is to draft a landing page that turns cold traffic into signups…"
 
-A single, crisp sentence:
+### 3. Context & Inputs
 
-- “Your goal is to produce a production-ready implementation plan for…”
-- “Your goal is to refactor this code for readability and testability…”
-- “Your goal is to draft a landing page that turns cold traffic into signups…”
+Structured, labeled references to user-provided material:
 
-No vague “help me with this.” Always explicit.
+- **Selective, not exhaustive**: Include what matters, not everything available
+- **Summarize before stuffing**: Extract key points from long inputs
+- **Explicit references**: "In `LoginForm.tsx`…", "From the error trace…"
+- **Labeled attachments**: `FILE:`, `CODE:`, `IMAGE:`, `ERROR:`
+- **Honest about gaps**: Note assumptions when context is incomplete
 
----
+### 4. Constraints & Preferences
 
-### 2.3 Context & Inputs (Text + Files + Code + Screenshots)
+Explicit guardrails and non-goals:
 
-Orbitar must be excellent at turning messy, multi-source context into something the model can actually use.
+- Tech stack, versions, tools
+- Non-goals ("Do not change API contracts…")
+- Style and tone requirements
+- Safety and behavioral boundaries
 
-Principles:
+### 5. Output Contract
 
-1. **Selective, not exhaustive**
+Clear specification of expected response format:
 
-   - Don’t dump the entire input blob into the prompt.
-   - Decide what’s relevant:
-     - For text: key objectives, constraints, examples, audience.
-     - For code: file names, function names, key snippets, error messages.
-     - For docs: headings, sections, bullet summaries.
-     - For images/screenshots (later): a concise description of what’s visible.
+- Required sections or keys
+- Format (markdown, JSON, code blocks, etc.)
+- Length bounds ("~500 words max", "one screenful")
+- Machine-checkable where possible
 
-2. **Summarize before you stuff**
+### 6. Quality Criteria / Self-Check
 
-   - For long inputs, Orbitar should:
+Instructions for the downstream model to verify its own output:
 
-     - Chunk the content.
-     - Extract and summarize the important pieces.
-     - Only include those summaries plus _minimal_ raw snippets that absolutely matter (e.g., an error trace or a function body).
-
-   - Bad:
-
-     > “Use the context above.”
-
-   - Good:
-     > “Context summary:  
-     > – You are working on X…  
-     > – The relevant files are A.ts, B.tsx…  
-     > – The core bug is Y, with this stack trace: … (truncated).”
-
-3. **Reference context explicitly**
-
-   - Instead of vague phrases, reference **where** the information came from:
-
-     - “In `LoginForm.tsx` there is a component that…”
-     - “From the user’s requirements list: 1) … 2) … 3) …”
-     - “From the screenshot: the error banner reads ‘…’ and appears after clicking Submit.”
-
-   - This anchors the model and makes it easier to debug later.
-
-4. **Keep attachments modular**
-
-   - Treat each attachment as a named unit:
-
-     - `FILE: user-story.md`
-     - `CODE: Dashboard.tsx`
-     - `IMAGE: error-popup.png (description: …)`
-
-   - The prompt format should make it clear to the model:  
-     _“You’re seeing several pieces of context; use them all, but don’t hallucinate missing ones.”_
-
-5. **Be honest about missing context**
-
-   - If something important is obviously missing (e.g., we only have part of a stack trace), the prompt should tell the model to:
-     - Make assumptions explicit **or**
-     - Ask the user clarifying questions before proceeding.
-
-Orbitar’s job is to build a compact, labeled “context package” that the model can reliably reason over, not to just shove bytes into a context window.
+- "Verify you followed the requested structure…"
+- "If critical info is missing, ask clarifying questions first…"
+- "Avoid vague statements; prefer concrete steps and examples…"
 
 ---
 
-### 2.4 Constraints & Preferences
+## The 10-Second Bar
 
-Examples:
+> If Orbitar's output isn't obviously better than what the user could write in 10 seconds, we failed.
 
-- Tech stack: “React + TypeScript, Tailwind, Next.js app router…”
-- Non-goals: “Do not change API contracts; only refactor internals.”
-- Style: “Keep tone friendly but not cringey. Avoid emojis.”
+This is the core quality standard. A refined prompt must:
 
-These should be explicit, not implied.
+1. **Clarify the goal** — make the desired outcome explicit
+2. **Surface and organize context** — structure the relevant information
+3. **Enforce structure** — provide a frame the model can "snap into"
+4. **Constrain output** — clear formatting and guardrails
+5. **Respect domain best practices** — coding, writing, research, etc.
 
----
-
-### 2.5 Output Contract
-
-The output should have a **clear contract** the model must follow:
-
-- Required sections or keys.
-- Formatting rules (markdown headings, bullet lists, JSON schema, code blocks).
-- Length bounds (“~500 words max”, “one screenful”, etc.).
-
-Ideally, the output is machine-checkable so Orbitar can later lint it.
+If a refined prompt is basically just "rewrite this more nicely," that's a **hard fail**.
 
 ---
 
-### 2.6 Quality Criteria / Self-Check
+## Context Handling Philosophy
 
-Templates should nudge models to self-check:
+Orbitar's job is to build a compact, labeled "context package" the model can reliably reason over:
 
-- “Verify you followed the requested structure; if not, fix it before sending.”
-- “If any critical info appears missing, ask clarifying questions first.”
-- “Avoid vague statements; prefer concrete steps and examples.”
-
-We bake evaluation hints into the prompt so we can inspect and grade the model’s behavior later.
-
----
-
-## 3. We Do **Not** Rely on User Prompts for Quality
-
-User prompts are _input_, not training data.
-
-Most users:
-
-- Underspecify.
-- Mix multiple tasks.
-- Forget constraints.
-- Use vague language.
-
-Orbitar’s philosophy:
-
-> The user provides **intent**, Orbitar manufactures the **prompt**.
-
-Implications:
-
-1. **User data is signal, not ground truth**
-
-   - We look at:
-
-     - Category/template choice.
-     - Acceptance vs heavy-edit vs abandon.
-     - Latency and error rates.
-
-   - We do **not** assume:
-     - “What users type is the right way to phrase prompts.”
-
-2. **We build our own training & eval corpora**
-
-   - Synthetic prompts describing realistic scenarios.
-   - Scenario-based tasks:
-
-     - Bugs to fix.
-     - Features to implement.
-     - Posts to write.
-     - Research questions to answer.
-
-   - Benchmarks that mimic real workflows, not toy problem sets.
-
-User prompts tell us **where** the pain is.  
-Orbitar decides **how** to solve it.
+1. **Summarize before you stuff** — for long inputs, chunk and extract
+2. **Reference sources explicitly** — "In `api/routes/user.ts`…"
+3. **Use labeled prefixes** — `FILE:`, `CODE:`, `IMAGE:`, `ERROR:`
+4. **Keep attachments modular** — each attachment is a named unit
+5. **Be honest about missing context** — note assumptions, request clarification
 
 ---
 
-## 4. Data & R&D Philosophy: Aggressive but Responsible
+## Templates as Behavior Presets
 
-We want to be at the frontier of prompt quality, without being creepy or reckless.
+Templates are **internal behavior configurations**, not visible output forms:
 
-### 4.1 Wide Intake of Public Knowledge
+### What Templates Define
 
-Orbitar should learn from:
+- **Base role**: How the downstream model should see itself
+- **Goal type**: What kinds of outcomes this template optimizes for
+- **Context hints**: What information matters for this domain
+- **Output hints**: Expected response format and structure
+- **Quality rules**: Domain-specific constraints and best practices
 
-- Public codebases and documentation (for coding patterns & best practices).
-- Open style guides for product copy, technical writing, marketing, etc.
-- Official AI provider docs (OpenAI, others) on recommended prompt patterns.
-- High-quality public prompt collections and research papers.
+### What Templates Are NOT
 
-Rule of thumb:
+- Visible "skeleton" or "form" the user sees
+- Labeled sections like "Role: … / Goal: … / Context: …"
+- Meta-commentary about prompt structure
 
-> “Learn from everything, copy from nothing.”
+### Template Lifecycle
 
-We synthesize new prompts from what we’ve observed; we don’t just paste other people’s strings.
-
----
-
-### 4.2 Background “Prompt Lab”
-
-We maintain an internal **Prompt Lab** that:
-
-- Continuously tests templates:
-
-  - Synthetic corpora (coding, writing, planning, research, etc.).
-  - Opt-in anonymized real prompts (heavily redacted).
-
-- Runs multi-model experiments:
-
-  - GPT-5-mini as baseline.
-  - Optionally other models (open-source, OpenRouter, etc.) to ensure robustness.
-
-- Scores templates automatically based on:
-
-  - Structure adherence.
-  - Output length vs target.
-  - Presence of required sections.
-  - Heuristics for hallucinations and low-signal output.
-
-- Proposes new variants:
-  - Internal “meta-agents” generate candidate prompt tweaks.
-  - We keep only variants that consistently win in A/B tests.
-
-Your cloud credits (e.g., the $300 GCP trial and any future grants) are perfect for this lab: cheap compute for experimentation, isolated from production traffic.
+- **Lab** → **Experimental** → **Beta** → **GA** → **Deprecated**
+- Decisions driven by usage, acceptance behavior, lab scores, and user ratings
 
 ---
 
-### 4.3 Privacy & Consent Are Hard Constraints
+## Backend Behavior Rules
 
-We are aggressive about quality but conservative about privacy:
+The refinement engine must:
 
-- User text is never sold or shared for unrelated purposes.
-- Content logging for improvement is **opt-in**, anonymized, and time-limited.
-- “Incognito refine” means **no content-level logging** for that refinement.
+1. **Treat user text as authoritative source material**
 
-We push quality **inside** these constraints, not around them.
+   - Preserve domain wording and details where strong
+   - Restructure, group, and sharpen—don't just paraphrase
 
----
+2. **Write directly to the downstream model**
 
-## 5. Scalability: Templates as an Engine, Not One-Offs
+   - Use second person: "You are…", "Your goal is…"
+   - No meta-commentary about "this prompt"
 
-Orbitar’s prompt system must scale to many templates without collapsing.
+3. **Never expose internal structure**
 
-Principles:
+   - No visible schema labels (Role:, Goal:, Context:, etc.)
+   - No mentions of "template", "scaffold", "skeleton"
+   - No phrases like "structured prompt", "clear sections"
+   - Never call the model a "prompt engineer"
 
-1. **Single Source of Truth**
+4. **Maintain information density**
 
-   - All templates live in a structured registry.
-   - Each template includes:
-     - `id`, `category`, `label`, `description`.
-     - Plan gating (Free / Light / Pro / Team).
-     - Status (Lab / Experimental / Beta / GA).
-     - Internal system prompt text & rules (private, backend-only).
+   - Similar density to input—don't aggressively compress
+   - Prefer restructuring over summarizing away detail
 
-2. **Configurable, Not Scattered**
-
-   - Adding a new template should mostly be a config/registry change.
-   - The Prompt Lab should be able to generate new candidates in this format.
-
-3. **Lifecycle Management**
-
-   - Templates move through:
-
-     - Lab → Experimental → Beta → GA → Deprecated.
-
-   - Decisions driven by:
-     - Usage.
-     - Acceptance/edit behavior.
-     - Lab scores.
-     - User ratings from the Template Store.
-
-4. **Plan-Aware**
-
-   - Free tier gets a carefully chosen core set.
-   - Light / Pro tiers unlock deeper, more specialized templates and early access.
+5. **Ask for clarification sparingly**
+   - Only when absolutely necessary
+   - Append a clearly marked "Clarifying questions" section
 
 ---
 
-## 6. Evaluation: How We Know We’re “The Best”
+## Data & R&D Philosophy
 
-We don’t just _feel_ like prompts are better; we prove it.
+### Prompt Lab
 
-### 6.1 Behavioral Metrics (Real Users)
+Continuous testing and improvement:
 
-- **Acceptance rate**: % of refinements used with minor edits.
-- **Heavy edit / revert rate**: signals the template missed the mark.
-- **Time to send**: short delay usually means “nailed it”; long delay suggests friction.
+- Synthetic corpora for coding, writing, planning, research
+- Multi-model experiments (GPT-4o, others for robustness)
+- Automatic scoring: structure adherence, length, required sections
+- A/B testing of template variants
+- Keep winners, retire losers
 
----
+### What We Learn From
 
-### 6.2 Template Metrics (Prompt Lab)
+- Public codebases and documentation (patterns, best practices)
+- Style guides (technical writing, marketing, editorial)
+- AI provider docs (recommended prompt patterns)
+- High-quality prompt research and collections
 
-- Structure adherence: can we parse the output as requested?
-- Task-specific checks:
+### Privacy Constraints
 
-  - Coding: compilable, tests included, comments present.
-  - Writing: correct sections, no obvious nonsense.
-
-- Comparative templates:
-  - Old template vs new variant on the same corpus.
-  - Keep the winner; retire the loser.
-
----
-
-### 6.3 Baselines & Benchmarks
-
-- Compare Orbitar’s refined prompt vs:
-  - A naive “raw user prompt → model” baseline.
-  - Minimal prompt patterns (e.g., trivial “You are X, do Y” prompts).
-
-If Orbitar isn’t consistently outperforming these baselines, that template isn’t done.
+- User text never sold or shared for unrelated purposes
+- Content logging is opt-in, anonymized, time-limited
+- "Incognito refine" means no content-level logging
 
 ---
 
-## 7. Shipping Philosophy: Sharp v1, Relentless v1.5+
+## Evaluation Framework
 
-We aim to release fast, but not sloppy.
+### Behavioral Metrics (Real Users)
 
-### 7.1 v1 (Launch)
+- **Acceptance rate**: % of refinements used with minor edits
+- **Heavy edit / revert rate**: signals template missed the mark
+- **Time to send**: short delay = "nailed it"; long delay = friction
 
-- Focus on a small set of categories where we can already be **excellent**:
+### Template Metrics (Prompt Lab)
 
-  - Coding.
-  - Writing (short + long).
-  - Planning / basic research.
+- Structure adherence: can we parse output as requested?
+- Task-specific checks (compilable code, correct sections, etc.)
+- Comparative testing: old vs new variants on same corpus
 
-- Templates must:
-  - Follow this philosophy.
-  - Be manually tested by us.
-  - Pass a minimal Prompt Lab eval.
+### Baselines
 
----
+Compare Orbitar output against:
 
-### 7.2 v1.5+ (Post-Launch)
+- Raw user prompt → model
+- Minimal prompts ("You are X, do Y")
 
-- Expand templates only where:
-
-  - Analytics show demand.
-  - We can maintain the quality bar.
-
-- Make the Prompt Lab a nightly routine:
-  - Re-evaluate templates.
-  - Promote / demote based on data.
-  - Continuously propose variants.
+If not consistently outperforming, template isn't done.
 
 ---
 
-## 8. Cultural Rules for Orbitar
+## Shipping Philosophy
 
-These are the rules for anyone touching Orbitar’s prompts (including future collaborators and future you):
+### v1: Sharp Launch
 
-1. **“Good enough” isn’t**
+- Focus on categories where we can be **excellent**: coding, writing, planning
+- Templates must follow this philosophy
+- Manual testing by team + minimal Prompt Lab eval
 
-   - “Decent” templates stay in Lab or Experimental.
-   - Only “this is clearly better than my own prompt” gets to GA.
+### v1.5+: Relentless Improvement
+
+- Expand only where analytics show demand **and** we can maintain quality
+- Nightly Prompt Lab: re-evaluate, promote/demote, propose variants
+- Continuous curiosity: track new best practices, refactor when needed
+
+---
+
+## Cultural Rules
+
+1. **"Good enough" isn't**
+
+   - "Decent" stays in Lab or Experimental
+   - Only "clearly better than my own prompt" gets to GA
 
 2. **Every template has an owner**
 
-   - Somebody is responsible for watching its metrics.
-   - If it underperforms, it’s improved or killed.
+   - Someone watches its metrics
+   - Underperformers are improved or killed
 
 3. **Constant curiosity**
 
-   - We read provider docs and research.
-   - We track new best practices.
-   - We are willing to refactor templates completely when the landscape changes.
+   - Read provider docs and research
+   - Track new best practices
+   - Willing to refactor completely when landscape changes
 
 4. **User trust > cleverness**
-
-   - No dark patterns around data use.
-   - No dishonest claims (“no data ever leaves your keyboard”) when we clearly must call models.
-   - Clear controls, clear language, and predictable behavior.
+   - No dark patterns around data use
+   - No dishonest claims about data handling
+   - Clear controls, clear language, predictable behavior
 
 ---
 
-Orbitar’s philosophy in one sentence:
+## Connection to Backend Implementation
 
-> **We manufacture prompts that are structurally smarter, context-aware, and measurably more effective than anything the user could dash off themselves — and we keep improving them with real data, deliberate testing, and zero shortcuts on trust.**
+| Philosophy Concept           | Backend Location                                                   |
+| ---------------------------- | ------------------------------------------------------------------ |
+| Orbitar Prompt Contract      | `lib/philosophy-snippets.ts` → `CORE_ORBITAR_CONTRACT`             |
+| Context handling rules       | `lib/philosophy-snippets.ts` → `CONTEXT_HANDLING_RULES`            |
+| Quality bar (10-second rule) | `lib/philosophy-snippets.ts` → `QUALITY_BAR`                       |
+| Domain-specific guidance     | `lib/philosophy-snippets.ts` → `DOMAIN_SNIPPETS`                   |
+| Template behaviors           | `lib/templates.ts` → `templateBehaviors`                           |
+| Template metadata            | `lib/templates.ts` → `templateRegistry`                            |
+| Refine engine                | `lib/refine-engine.ts` → `RefineEngine`, `buildRefineSystemPrompt` |
+| API endpoint                 | `app/api/refine-prompt/route.ts`                                   |
+
+---
+
+_Last updated: November 2024_

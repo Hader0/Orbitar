@@ -311,9 +311,13 @@ async function handleRefineRequest(request, sendResponse) {
             templateIdUsed: data.templateIdUsed,
             categoryUsed: data.categoryUsed,
             refinedTextLength: (data.refinedText || "").length,
+            refineEventId: data.refineEventId || null,
           });
         }
-        sendResponse({ refinedText: data.refinedText || text });
+        sendResponse({
+          refinedText: data.refinedText || text,
+          refineEventId: data.refineEventId || null,
+        });
         return;
       } catch (err) {
         // Network error (connection refused, etc) – try next endpoint

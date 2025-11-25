@@ -146,6 +146,55 @@ RIGHT:
 `.trim();
 
 /**
+ * Attachment Usage Rules
+ *
+ * When attachments are present, they are not optional. The refinement must
+ * scan them, mine relevant details, and embed essentials into the refined prompt.
+ */
+export const ATTACHMENT_USAGE_RULES = `
+ATTACHMENTS USAGE (mandatory when present):
+
+- Assume attachments contain important context if they exist.
+- You MUST scan them and extract 3–10 key facts or concepts that are relevant to the task.
+- Embed those essentials as compact bullets in the refined prompt so the downstream model can use them directly.
+- Use labeled prefixes to reference attachments explicitly:
+  • FILE: filename.ext — [what it covers / key concept or snippet]
+  • CODE: path/to/file.ts — [what this code is / relevant function or component]
+  • ERROR: <message or code> — [what it indicates / likely cause domain]
+  • IMAGE: name.png — [what is visible / salient information]
+- Be selective but substantive:
+  • Do NOT dump full content; include short summaries, names, and essential bits only
+  • Maintain information density—reorganize and sharpen rather than flatten into vague platitudes
+- If an attachment is irrelevant to the task, you may ignore it—but only after deliberate consideration.
+
+WRONG vs RIGHT (attachments):
+
+1) PHILOSOPHY:
+  WRONG: Ignore FILE: PHILOSOPHY.md and produce a generic plan without philosophy anchors.
+  RIGHT: Include bullets such as:
+    • FILE: PHILOSOPHY.md — Orbitar’s prompt philosophy and Prompt Lab design
+    • 10-second bar: output must be obviously better than what a user can write in 10 seconds
+    • Templates are behavior presets; refined prompt must be self-contained
+
+2) CODE + ERROR:
+  WRONG: "Debug the issue" without naming files or errors.
+  RIGHT: Include bullets such as:
+    • CODE: api/routes/user.ts — user creation route handling signup
+    • ERROR: PrismaClientKnownRequestError P2002 — unique constraint violation on email
+    • Stack: Next.js 14, Prisma 5.12.1, PostgreSQL 15
+
+3) IMAGE screenshot:
+  WRONG: Ignore the screenshot or mention it without extracting visible info.
+  RIGHT: Include bullets such as:
+    • IMAGE: dashboard.png — Orbitar dashboard with template acceptance rates and lab scores
+    • Highlights: lifecycle (Lab → GA), success metrics visible on dashboard
+
+FINAL:
+- The downstream model will ONLY see your refined prompt, not the original attachments.
+- Therefore, the refined prompt MUST be self-contained, embedding essential attachment-derived content.
+`.trim();
+
+/**
  * Self-Contained Context Packaging Rules
  *
  * CRITICAL: The refined prompt must be SELF-CONTAINED. The downstream model

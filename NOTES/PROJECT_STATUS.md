@@ -1,6 +1,6 @@
 # Orbitar Project Status & Roadmap
 
-## Quick Status Checklist (Updated 2025-11-24)
+## Quick Status Checklist (Updated 2025-11-25)
 
 This checklist summarizes what is implemented vs. still pending, based on the current codebase. It complements the narrative sections below.
 
@@ -11,12 +11,12 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
   - [x] Next.js 14 App Router with TypeScript and Tailwind
   - [x] Prisma schema and SQLite dev DB
     - [x] Models: User, ApiKey, Account, Session, VerificationToken, PromptEvent, UserTemplatePreference
-    - [x] Migrations present in backend/prisma/migrations
+  - [x] Migrations present in `backend/prisma/migrations`
   - [x] NextAuth CredentialsProvider “Dev Login” with JWT sessions
 
 - Core APIs
 
-  - [x] /api/refine-prompt with:
+  - [x] `/api/refine-prompt` with:
     - [x] API key auth (Bearer), per-plan rate limits
     - [x] Template resolution (explicit id → category default → legacy mapping → heuristic/LLM)
     - [x] OpenAI SDK with prioritized model fallback; REST fallback path
@@ -24,74 +24,100 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
     - [x] Incognito flag respected (user default + per-request override)
     - [x] Token and latency capture when available
   - Templates
-    - [x] /api/templates (public registry listing)
-    - [x] /api/templates/me (session-scoped enabled flags)
-    - [x] /api/templates/for-key (plan and user preferences filtered via API key)
-    - [x] /api/templates/preferences (persist enable/disable)
-    - [x] templateRegistry with categories and minPlan rules
-    - [x] Heuristic classifyTemplate with optional LLM classifier gate
+    - [x] `/api/templates` (public registry listing)
+    - [x] `/api/templates/me` (session-scoped enabled flags)
+    - [x] `/api/templates/for-key` (plan and user preferences filtered via API key)
+    - [x] `/api/templates/preferences` (persist enable/disable)
+    - [x] `templateRegistry` with categories and `minPlan` rules
+    - [x] Heuristic `classifyTemplate` with optional LLM classifier gate
   - User and Admin
-    - [x] /api/user/me (plan, usage counters, privacy flags)
-    - [x] /api/user/stats (per-user totals, last 7d, byCategory/byTemplate)
-    - [x] /api/admin/stats (guarded by ADMIN_EMAIL; totals, last 30d, byCategory/byTemplate)
-    - [x] /api/settings/privacy (update allowDataUse/defaultIncognito)
+    - [x] `/api/user/me` (plan, usage counters, privacy flags)
+    - [x] `/api/user/stats` (per-user totals, last 7d, byCategory/byTemplate)
+    - [x] `/api/admin/stats` (guarded by `ADMIN_EMAIL`; totals, last 30d, byCategory/byTemplate)
+    - [x] `/api/settings/privacy` (update `allowDataUse`/`defaultIncognito`)
   - Stripe
-    - [x] /api/stripe/checkout (creates subscription Checkout session; ensures customer)
-    - [x] /api/webhooks/stripe (verifies signature, maps price → plan, updates user)
+    - [x] `/api/stripe/checkout` (creates subscription Checkout session; ensures customer)
+    - [x] `/api/webhooks/stripe` (verifies signature, maps price → plan, updates user)
     - [x] Stripe library wrapper and env guards
 
 - Web app UI
 
   - [x] Dashboard page
     - [x] Plan card with usage display
-    - [x] Subscription status surfaced (stripeSubscriptionStatus)
+    - [x] Subscription status surfaced (`stripeSubscriptionStatus`)
     - [x] API key management (generate/revoke via server actions)
     - [x] UsageCard and PrivacyCard wired
     - [x] UpgradeCard and CheckoutButtons present
-  - [x] Templates section scaffold (templates/page.tsx, TemplatesClient.tsx)
+  - [x] Templates section scaffold (`templates/page.tsx`, `TemplatesClient.tsx`)
   - [x] Installed page and Privacy form scaffolds present
 
 - Chrome extension
 
   - [x] Manifest V3 with permissions/host_permissions
   - [x] Background script:
-    - [x] Refine flow → calls web app /api/refine-prompt using stored API key
+    - [x] Refine flow → calls web app `/api/refine-prompt` using stored API key
     - [x] Classify flow (legacy), Get templates, Get user plan
-    - [x] Dev-friendly endpoint fallbacks (:3000 primary)
-  - [x] Popup page to store Orbitar API key in chrome.storage.sync
+    - [x] Dev-friendly endpoint fallbacks (`:3000` primary)
+  - [x] Popup page to store Orbitar API key in `chrome.storage.sync`
   - [x] Content script and styles present (injection UI and ChatGPT adapter per spec)
   - [x] Keyboard shortcut handler for “refine-prompt”
 
 - Data and privacy
+
   - [x] PromptEvent model and writes on success/failure
-  - [x] Privacy flags on User (allowDataUse, defaultIncognito) and update API
+  - [x] Privacy flags on User (`allowDataUse`, `defaultIncognito`) and update API
   - [x] Incognito respected in logs; token/latency captured where available
+
+- Prompt Lab v0 – instrumentation & versioning
+
+  - [x] `RefineEvent` table (`refine_events`) with:
+    - `userId`, `plan`, `category`, `templateId` (slug), `templateVersion`
+    - `rawTextLength`, `refinedTextLength`
+    - `promptLabOptIn`, `isIncognito`
+    - `acceptedAt`, `reverted`, `editDistanceBucket`
+  - [x] `promptLabOptIn` boolean on `User` + privacy API wiring
+  - [x] Installed settings UI toggle: **“Help improve Orbitar’s templates (Prompt Lab)”**
+  - [x] Template identity:
+    - `TemplateSlug` (e.g. `coding_feature_default`)
+    - `templateVersionRegistry` with semver versions (all GA templates start at `"1.0.0"`)
+  - [x] Refine route:
+    - Normalizes plan to `PlanKey` (`free` | `light` | `pro` | `admin`)
+    - Logs both legacy `PromptEvent` and new `RefineEvent` on each refine
+  - [x] Behavior fields & API
+    - `/api/refine-events/behavior` (session-auth, input validation, structured errors)
+    - Extension forwards/stores `refineEventId` for future UX hooks
 
 ### ⏳ Outstanding / To Do
 
 - Local dev setup polish
 
-  - [ ] Ensure backend/.env contains OPENAI_API_KEY and OPENAI_MODEL
-  - [ ] Verify /api/refine-prompt end-to-end latency and model priority behavior
-  - [ ] Add DEBUG=true toggle docs and recommended usage
+  - [ ] Ensure `backend/.env` contains `OPENAI_API_KEY` and `OPENAI_MODEL`
+  - [ ] Verify `/api/refine-prompt` end-to-end latency and model priority behavior
+  - [ ] Add `DEBUG=true` toggle docs and recommended usage
 
 - Stripe wiring and testing
 
-  - [ ] Set STRIPE_SECRET_KEY in .env
-  - [ ] Set STRIPE_PRICE_BUILDER and STRIPE_PRICE_PRO (or legacy STRIPE_PRICE_LIGHT) and verify plan mapping
-  - [ ] Configure STRIPE_WEBHOOK_SECRET and test webhook signature verification
-  - [ ] Wire Upgrade buttons fully and run checkout flow (Free → Builder/Pro), confirm plan/status updates in DB
+  - [ ] Set `STRIPE_SECRET_KEY` in `.env`
+  - [ ] Set `STRIPE_PRICE_LIGHT`/`STRIPE_PRICE_BUILDER` and `STRIPE_PRICE_PRO` and verify plan mapping
+  - [ ] Configure `STRIPE_WEBHOOK_SECRET` and test webhook signature verification
+  - [ ] Wire Upgrade buttons fully and run checkout flow (Free → Light/Pro), confirm plan/status updates in DB
 
 - Authentication (Production)
 
-  - [ ] Add Google OAuth (GoogleProvider) with proper consent screen
-  - [ ] Replace Dev Login in prod; set NEXTAUTH_URL and NEXTAUTH_SECRET
+  - [ ] Add Google OAuth (`GoogleProvider`) with proper consent screen
+  - [ ] Replace Dev Login in prod; set `NEXTAUTH_URL` and `NEXTAUTH_SECRET`
 
 - Logging/analytics depth
 
-  - [ ] Add acceptance/edit behavior tracking (post-refine edit intensity and accept/revert signals)
-  - [ ] Extend PromptEvent for error taxonomies and model attribution consistency
+  - [ ] Add acceptance/edit behavior tracking (post-refine edit intensity and accept/revert signals) using `acceptedAt`, `reverted`, `editDistanceBucket` on `RefineEvent`
+  - [ ] Extend PromptEvent/RefineEvent for error taxonomies and model attribution consistency
   - [ ] Token accounting consistency across SDK/REST paths
+
+- Prompt Lab data & metrics
+
+  - [ ] Populate core Lab tables (`synthetic_tasks`, `prompt_samples`, `lab_runs`, `lab_scores`) with real data
+  - [ ] Nightly/periodic jobs to run Lab tasks and compute scores off `RefineEvent` + synthetic/user samples
+  - [ ] Admin views for Lab runs/scores (leaderboard, drilldown, explorer)
 
 - Dashboard and templates UX
 
@@ -101,6 +127,7 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
   - Master dashboard
     - [ ] Deep time-series, by plan/model/category charts
     - [ ] “Promising Results” pipeline for template evolution
+    - [ ] Prompt Lab–specific views (overview, template leaderboard, template drilldown, prompt explorer, lab scoring)
   - Templates store
     - [ ] Browsing by category/tags
     - [ ] Enable/disable management UX and status badges (GA/Beta/Experimental)
@@ -111,13 +138,14 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
   - [ ] Build the “Data Use” onboarding screen (extension + web app)
   - [ ] Opt-in control copy and flows; “Incognito refine” UI affordance in extension
   - [ ] Document collection/anonymization/retention (website pages)
+  - [ ] Public `/prompt-lab` page using the copy in section **4.3**
 
 - Production readiness
 
-  - [ ] Switch Prisma provider to PostgreSQL and move DATABASE_URL to Postgres
+  - [ ] Switch Prisma provider to PostgreSQL and move `DATABASE_URL` to Postgres
   - [ ] Migrate and validate on hosted DB (Supabase/Neon/Vercel Postgres)
   - [ ] Configure Vercel/host envs (DB, NextAuth, OpenAI, Stripe, Google)
-  - [ ] Update extension API_BASE_URL to prod; package and publish to Chrome Web Store
+  - [ ] Update extension `API_BASE_URL` to prod; package and publish to Chrome Web Store
 
 - QA and hardening
 
@@ -127,6 +155,7 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
   - [ ] Security review (hash API keys in prod, input limits, auth checks)
 
 - Legal/compliance
+
   - [ ] Publish Privacy Policy and Terms of Service pages (needed for OAuth + Chrome Store)
 
 ---
@@ -279,6 +308,164 @@ The User Dashboard should feel like a **personal prompt cockpit**: clean overvie
   - Overuse/abuse detection (e.g., users constantly hitting max limits).
 
 The Master Dashboard should feel like a **dark-theme mission control UI** with strong accent colors, animated counters, and smooth drill-downs.
+
+### 2.3 Prompt Lab Master Dashboard (Vision)
+
+Goal: everything about Prompt Lab is observable and explorable — not just aggregate numbers. You can see trends, failures, “hidden gems”, and even individual prompts (for opt-in, non-incognito users) in one “mission control” view.
+
+This section describes the _target_ Prompt Lab Master Dashboard, so future implementation work can line up with it.
+
+#### 1. Top-level Prompt Lab overview
+
+Cards + charts:
+
+- **Total Lab coverage**
+
+  - % of templates under Prompt Lab evaluation
+  - # of template versions active (1.0.0, 1.1.0, etc.)
+  - # of synthetic tasks in corpus
+
+- **User behavior**
+
+  - Opt-in rate over time, by plan.
+  - Refines per day/week by category.
+
+- **Quality trend**
+  - Global acceptance vs heavy-edit rate over time.
+  - Average raw → refined length change.
+
+This gives a “health at a glance” for Prompt Lab.
+
+#### 2. Template leaderboard
+
+A table like:
+
+- Template (slug)
+- Current GA version
+- Usage (last 7/30 days)
+- Acceptance rate
+- Heavy-edit rate
+- Lab score (once we have `lab_scores`)
+- Trend arrows (improving / flat / declining)
+
+Filters:
+
+- By category (coding, writing, planning, etc.)
+- By plan (free vs pro vs admin)
+- By status (GA vs Experimental vs Deprecated)
+
+Use cases:
+
+- Spot “hidden gems” (low usage but great metrics).
+- Catch “silent failures” (high usage, high heavy-edit).
+
+#### 3. Template detail drilldown
+
+When you click into a template (e.g. `coding_feature_default`), you see:
+
+- **Version history table**, e.g.:
+
+  | Version | Period           | Usage | Accept % | Heavy-edit % | Lab score | Notes           |
+  | ------- | ---------------- | ----- | -------- | ------------ | --------- | --------------- |
+  | 1.0.0   | 2025-11-20 → now | 4,231 | 72%      | 14%          | 0.83      | Initial GA      |
+  | 1.1.0   | (future)         | …     | …        | …            | …         | Prompt Lab bump |
+
+- **Graphs**
+
+  - Usage over time.
+  - Acceptance vs heavy-edit over time.
+  - (Later) Lab score over time and across versions.
+
+- **Samples**
+  - Anonymized example prompts + refined outputs pulled from:
+    - Synthetic tasks (`synthetic_tasks`).
+    - Opt-in user samples (`prompt_samples`).
+
+This is where you answer: “Is this template actually getting better?”
+
+#### 4. Prompt-level exploration (for you only, not public)
+
+We want a way to “see every prompt” while respecting privacy.
+
+Data model:
+
+- `RefineEvent` = high-level metadata, _no_ raw content.
+- `prompt_samples` = separate table with:
+  - `refineEventId` (FK)
+  - `rawText` (sanitized)
+  - `refinedText` (optional/sanitized)
+  - `templateSlug`, `templateVersion`, `plan`, `category`
+  - Timestamps
+
+UI:
+
+- Filters:
+
+  - Category, template, plan
+  - Edit bucket (`none` | `light` | `heavy`)
+  - Date range
+  - Opt-in status, incognito=false
+
+- List of prompts:
+  - Raw text snippet
+  - Refined text snippet
+  - Key metadata (templateSlug, version, plan, category, edit bucket)
+
+Use this to:
+
+- See what “messy” input users actually send.
+- Find patterns that drive heavy edits.
+- Choose where to invest in new templates/variants.
+
+#### 5. Lab scoring views (after we add lab tables)
+
+With Prompt Lab tables in place (`synthetic_tasks`, `lab_runs`, `lab_scores`), each template version gets offline scores such as:
+
+- `structure_score`
+- `contract_score`
+- `domain_score`
+- Pass/fail on Orbitar Prompt Contract conditions
+
+Dashboard views:
+
+- Compare Lab scores vs real acceptance rate.
+- Compare template versions on the same task set (A/B style).
+- Highlight variants that are promising in Lab but under-used in production.
+
+This is the R&D view of Prompt Lab.
+
+#### What’s left to do to fully realize this vision
+
+Data/model work:
+
+- [ ] Extend `RefineEvent` with:
+  - `acceptedAt`
+  - `reverted`
+  - `editDistanceBucket` (`"none" | "light" | "heavy"`)
+- [ ] Add Prompt Lab–specific tables:
+  - `synthetic_tasks`
+  - `prompt_samples`
+  - `lab_runs`
+  - `lab_scores`
+  - (Optional) `template_version_daily_metrics` materialized view
+
+UX work:
+
+- [ ] Build `/admin/prompt-lab` or `/admin/master` with:
+  - Overview
+  - Template leaderboard
+  - Template detail pages
+  - Prompt explorer
+  - Lab scoring views
+- [ ] Use the anti–“AI slop” dashboard aesthetic:
+  - Dark “mission control” vibe
+  - Strong accent colors for status/health
+  - Smooth charts and animations
+
+Operational:
+
+- [ ] Decide a cadence for Lab runs (nightly/weekly).
+- [ ] Ensure `PROMPT_LAB_CHANGELOG.md` gets a one-line entry for each schema/behavior change so graphs can be interpreted historically.
 
 ---
 
@@ -486,6 +673,60 @@ Background agents exist primarily for **R&D and testing**, not as your core mark
 This enables the statement:
 
 > “Orbitar’s templates are continuously improved by a feedback loop of real user prompts, analytics from our Master Dashboard, and an internal ‘Prompt Lab’ of AI agents stress-testing new ideas.”
+
+---
+
+### 4.3 Prompt Lab – User-Facing Copy
+
+This section stores the canonical copy for the public `/prompt-lab` page and the settings toggle, without revealing implementation details to competitors.
+
+#### What is Prompt Lab?
+
+Prompt Lab is Orbitar’s behind-the-scenes engine that tests and improves the prompts used by the Refine button.
+
+Instead of freezing your prompts in time, Orbitar runs controlled experiments in the background to keep templates sharp, structured, and aligned with how people actually use the product.
+
+#### What happens if I opt in?
+
+If you opt in, a small sample of your prompts is anonymized and used in internal tests to make better templates.
+
+- Uses a sample of your prompts to test better prompt templates.
+- Anonymized & time-limited.
+- Incognito refinements are never included.
+
+#### What Prompt Lab does _not_ do
+
+Prompt Lab does **not**:
+
+- Expose your individual prompts or data publicly.
+- Share implementation details, template names, or metrics that would help competitors copy the system.
+- Use Incognito refinements in any experiments.
+
+#### Settings toggle (short form)
+
+- **Label**:  
+  `Help improve Orbitar’s templates (Prompt Lab)`
+
+- **Subtext (2 lines)**:  
+  `Uses a sample of your prompts to test better prompt templates.`  
+  `Anonymized & time-limited. Incognito is never included.`
+
+  ### 4.4 Prompt Lab Changelog Discipline
+
+Any time you make Prompt Lab–related changes (migrations, new tables, or big behavior changes), add a one-line entry to `PROMPT_LAB_CHANGELOG.md`.
+
+Why:
+
+- When a metric shifts, you can line it up with a concrete change.
+- Future you can see when versioning, metrics, or sampling logic changed.
+
+Example entries:
+
+```md
+## 2025-11-25
+
+- v0.1 – Added RefineEvent table, promptLabOptIn, isIncognito. Basic refine logging wired.
+- v0.2 – Introduced templateSlug + semver version registry. All GA templates at 1.0.0.
 
 ---
 
@@ -724,3 +965,4 @@ _Goal: Deploy the app for real users._
 5. **Legal & Compliance**
    - [ ] Add Privacy Policy and Terms of Service pages (required for Google OAuth and Chrome Web Store).
    - [ ] Document data collection, anonymization, and retention policies clearly.
+```

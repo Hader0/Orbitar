@@ -17,6 +17,11 @@ import {
   isTemplateId,
   getCategoryDefaultTemplate,
 } from "@/lib/templates";
+import {
+  getTemplateVersion,
+  getTemplateSlug,
+  type PlanKey,
+} from "@/lib/templates";
 import { RefineEngine, type RefineRequest } from "@/lib/refine-engine";
 import type { UserPlanKey } from "@/lib/model-router";
 
@@ -211,6 +216,16 @@ export async function POST(req: NextRequest) {
       text
     );
     const categoryUsed = templateRegistry[templateId].category;
+    const templateVersion = getTemplateVersion(templateId);
+    if (!templateVersion) {
+      return jsonCors(
+        {
+          error: "TEMPLATE_RESOLUTION_ERROR",
+          message: "Failed to resolve template version",
+        },
+        400
+      );
+    }
 
     if (DEBUG) {
       console.debug("Resolved template:", { templateId, categoryUsed });
@@ -226,6 +241,13 @@ export async function POST(req: NextRequest) {
     else if (planRaw === "pro") userPlanKey = "pro";
     else if (planRaw === "enterprise") userPlanKey = "enterprise";
 
+    // Normalized plan key for Prompt Lab logging
+    let planForLab: PlanKey = "free";
+    if (planRaw === "free") planForLab = "free";
+    else if (planRaw === "builder" || planRaw === "light") planForLab = "light";
+    else if (planRaw === "pro") planForLab = "pro";
+    else if (planRaw === "admin") planForLab = "admin";
+
     // 6. Run Refine Engine
     const start = Date.now();
 
@@ -236,28 +258,110 @@ export async function POST(req: NextRequest) {
     let used = 0;
     const attachmentNames: string[] = [];
     const parts: string[] = [];
+
+    const IMAGE_EXTS = [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".webp",
+      ".svg",
+      ".bmp",
+      ".tiff",
+    ];
+    const CODE_EXTS = [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".py",
+      ".rb",
+      ".go",
+      ".rs",
+      ".java",
+      ".cs",
+      ".php",
+      ".swift",
+      ".kt",
+      ".scala",
+      ".sh",
+      ".bash",
+      ".zsh",
+      ".sql",
+      ".prisma",
+      ".json",
+      ".yml",
+      ".yaml",
+      ".toml",
+      ".ini",
+      ".env",
+      ".md",
+      ".txt",
+      ".log",
+    ];
+
+    function inferType(
+      name: string,
+      provided?: string | null
+    ): "FILE" | "CODE" | "IMAGE" | "ERROR" {
+      const p = (provided || "").toUpperCase();
+      if (p === "FILE" || p === "CODE" || p === "IMAGE" || p === "ERROR")
+        return p as any;
+      const lower = name.toLowerCase();
+      if (IMAGE_EXTS.some((ext) => lower.endsWith(ext))) return "IMAGE";
+      if (CODE_EXTS.some((ext) => lower.endsWith(ext))) return "CODE";
+      return "FILE";
+    }
+
+    function previewText(raw: string, remainingBudget: number): string {
+      if (remainingBudget <= 0) return "[content omitted due to size]";
+      // Take up to ~40 lines but also respect remaining character budget
+      const lines = raw.split(/\r?\n/);
+      const limited = lines.slice(0, 40).join("\n");
+      return limited.slice(0, remainingBudget);
+    }
+
     for (const a of rawAttachments) {
       if (!a || typeof a !== "object") continue;
       const name = typeof a.name === "string" ? a.name : "attachment";
-      const type = typeof a.type === "string" ? a.type.toUpperCase() : "FILE";
-      const content =
+      const type = inferType(
+        name,
+        typeof a.type === "string" ? a.type : undefined
+      );
+      const rawContent =
         typeof (a as Record<string, unknown>).content === "string"
           ? ((a as Record<string, unknown>).content as string)
           : "";
+
       attachmentNames.push(name);
-      if (content) {
-        const remaining = Math.max(0, ATTACHMENTS_MAX_CHARS - used);
-        if (remaining > 0) {
-          const slice = content.slice(0, remaining);
-          parts.push(`${type}: ${name}\n${slice}`);
+
+      const remaining = Math.max(0, ATTACHMENTS_MAX_CHARS - used);
+
+      if (type === "IMAGE") {
+        if (rawContent && remaining > 0) {
+          const slice = rawContent.slice(0, Math.min(remaining, 600)); // short caption/alt text
+          parts.push(`IMAGE: ${name}\n${slice}`);
           used += slice.length;
+        } else if (!rawContent) {
+          parts.push(`IMAGE: ${name}\n[no textual description provided]`);
         } else {
-          parts.push(`${type}: ${name}\n[content omitted due to size]`);
+          parts.push(`IMAGE: ${name}\n[content omitted due to size]`);
         }
+        continue;
+      }
+
+      // FILE / CODE / ERROR – treat as text-like and show a compact preview
+      if (rawContent) {
+        const slice = previewText(rawContent, remaining);
+        parts.push(`${type}: ${name}\n${slice}`);
+        used += slice.length;
       } else {
         parts.push(`${type}: ${name}`);
       }
     }
+
     const attachmentsBlock =
       parts.length > 0 ? `\n\nATTACHMENTS:\n${parts.join("\n\n")}` : "";
     const combinedText =
@@ -301,8 +405,11 @@ export async function POST(req: NextRequest) {
       effectiveIncognito = incognitoRaw;
     }
 
-    // 8. Log Event (non-blocking)
+    let refineEventId: string | null = null;
+
+    // 8. Log Events (non-blocking)
     try {
+      // Legacy event for dashboards
       await prisma.promptEvent.create({
         data: {
           userId: user.id,
@@ -319,8 +426,41 @@ export async function POST(req: NextRequest) {
           incognito: effectiveIncognito,
         },
       });
+
+      // Prompt Lab: refine_events row
+      const rawTextLength = typeof text === "string" ? text.length : 0;
+      const refinedTextLength =
+        typeof result.refinedText === "string" ? result.refinedText.length : 0;
+      const promptLabOptIn =
+        ((user as any)?.promptLabOptIn as boolean | undefined) ?? false;
+
+      try {
+        const refineEvent = await prisma.refineEvent.create({
+          data: {
+            userId: user.id,
+            plan: planForLab,
+            category: categoryUsed,
+            templateId: getTemplateSlug(templateId),
+            templateVersion: templateVersion,
+            rawTextLength,
+            refinedTextLength,
+            // acceptedAt: null, // set later by acceptance flow
+            // reverted: false,  // default
+            // editDistanceBucket: null, // to be computed later
+            promptLabOptIn,
+            isIncognito: !!effectiveIncognito,
+          },
+        });
+        refineEventId = refineEvent.id;
+      } catch (err) {
+        console.error(
+          "[RefineEvent] create failed",
+          { userId: user.id, templateId, categoryUsed },
+          err
+        );
+      }
     } catch (logErr) {
-      console.error("PromptEvent log error:", logErr);
+      console.error("Refine logging error:", logErr);
     }
 
     // 9. Increment Usage
@@ -335,6 +475,8 @@ export async function POST(req: NextRequest) {
         refinedText: result.refinedText,
         templateIdUsed: result.templateIdUsed,
         categoryUsed: result.categoryUsed,
+        // Non-breaking extra field: allows extension/UI to update behavior later
+        refineEventId: typeof refineEventId === "string" ? refineEventId : null,
       },
       200
     );

@@ -50,14 +50,19 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 export default function PrivacyForm({
   initialAllowDataUse,
   initialDefaultIncognito,
+  initialPromptLabOptIn,
 }: {
   initialAllowDataUse: boolean;
   initialDefaultIncognito: boolean;
+  initialPromptLabOptIn: boolean;
 }) {
   const [allowChecked, setAllowChecked] =
     React.useState<boolean>(initialAllowDataUse);
   const [defaultIncognito, setDefaultIncognito] = React.useState<boolean>(
     initialDefaultIncognito
+  );
+  const [promptLabOptIn, setPromptLabOptIn] = React.useState<boolean>(
+    initialPromptLabOptIn
   );
   const [pending, setPending] = React.useState<boolean>(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -75,6 +80,7 @@ export default function PrivacyForm({
         body: JSON.stringify({
           allowDataUse: allowChecked,
           defaultIncognito: defaultIncognito,
+          promptLabOptIn: promptLabOptIn,
         }),
       });
       if (!resp.ok) {
@@ -129,6 +135,23 @@ export default function PrivacyForm({
           <span className="block text-xs text-zinc-400">
             Incognito refinements are excluded from certain analyses and marked
             to avoid being surfaced in templates.
+          </span>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-3 mt-4 text-zinc-200">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 accent-zinc-200"
+          checked={promptLabOptIn}
+          onChange={(e) => setPromptLabOptIn(e.target.checked)}
+        />
+        <span>
+          Help improve Orbitar’s templates (Prompt Lab)
+          <span className="block text-xs text-zinc-400">
+            Opt in to allow anonymized prompts/refinements to be used for Prompt
+            Lab evaluations and template improvements. Incognito refinements are
+            always excluded.
           </span>
         </span>
       </label>

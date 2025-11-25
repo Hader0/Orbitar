@@ -39,13 +39,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { allowDataUse, defaultIncognito } = body || {};
+    const { allowDataUse, defaultIncognito, promptLabOptIn } = body || {};
 
     // Validate inputs (both optional)
     const data: Record<string, any> = {};
     if (typeof allowDataUse === "boolean") data.allowDataUse = allowDataUse;
     if (typeof defaultIncognito === "boolean")
       data.defaultIncognito = defaultIncognito;
+    if (typeof promptLabOptIn === "boolean")
+      data.promptLabOptIn = promptLabOptIn;
 
     if (Object.keys(data).length === 0) {
       return jsonCors(
@@ -71,6 +73,7 @@ export async function POST(req: NextRequest) {
           id: updated.id,
           allowDataUse: u.allowDataUse,
           defaultIncognito: u.defaultIncognito,
+          promptLabOptIn: u.promptLabOptIn ?? false,
         },
       },
       200

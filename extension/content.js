@@ -57,9 +57,29 @@ function addRefineFilterListeners(btn) {
 
 /* --- Safe Messaging --- */
 function sendMessageSafe(message, callback, retries = 2, delayMs = 400) {
+  const hasRuntime =
+    typeof chrome !== "undefined" &&
+    chrome &&
+    chrome.runtime &&
+    typeof chrome.runtime.sendMessage === "function";
+
+  // If runtime is unavailable (e.g., not running in extension context), short-circuit gracefully
+  if (!hasRuntime) {
+    callback && callback({ error: "Extension runtime unavailable." });
+    return;
+  }
+
   try {
     chrome.runtime.sendMessage(message, (response) => {
-      if (chrome.runtime.lastError) {
+      const rtErr =
+        typeof chrome !== "undefined" &&
+        chrome &&
+        chrome.runtime &&
+        chrome.runtime.lastError
+          ? chrome.runtime.lastError
+          : null;
+
+      if (rtErr) {
         if (retries > 0) {
           setTimeout(
             () => sendMessageSafe(message, callback, retries - 1, delayMs),
@@ -68,9 +88,7 @@ function sendMessageSafe(message, callback, retries = 2, delayMs = 400) {
         } else {
           callback &&
             callback({
-              error:
-                chrome.runtime.lastError.message ||
-                "Extension messaging failed.",
+              error: rtErr.message || "Extension messaging failed.",
             });
         }
         return;
@@ -781,10 +799,16 @@ function showIntegratedPanel() {
       (response) => {
         console.log("[Orbitar Refine] === API RESPONSE RECEIVED ===");
         console.log("[Orbitar Refine] Response:", response);
-        console.log(
-          "[Orbitar Refine] Chrome runtime error:",
-          chrome.runtime.lastError
-        );
+        {
+          const rtErr =
+            typeof chrome !== "undefined" &&
+            chrome &&
+            chrome.runtime &&
+            chrome.runtime.lastError
+              ? chrome.runtime.lastError
+              : null;
+          console.log("[Orbitar Refine] Chrome runtime error:", rtErr);
+        }
 
         const original = refineBtn.getAttribute("data-prev-html");
         if (original) refineBtn.innerHTML = original;
@@ -798,21 +822,59 @@ function showIntegratedPanel() {
           if (pill) pill.classList.remove("refining");
         } catch (_e) {}
 
-        if (!response || response.error || chrome.runtime.lastError) {
-          const errorText =
-            response?.error ||
-            chrome.runtime.lastError?.message ||
-            "Orbitar: backend unreachable. Is dev server running?";
-          console.error("[Orbitar Refine] ERROR:", errorText);
-          errorMsg.textContent = errorText;
-          return;
+        {
+          const rtErr =
+            typeof chrome !== "undefined" &&
+            chrome &&
+            chrome.runtime &&
+            chrome.runtime.lastError
+              ? chrome.runtime.lastError
+              : null;
+          if (!response || response.error || rtErr) {
+            const errorText =
+              (response && response.error) ||
+              (rtErr && rtErr.message) ||
+              "Orbitar: backend unreachable. Is dev server running?";
+            console.error("[Orbitar Refine] ERROR:", errorText);
+            errorMsg.textContent = errorText;
+            return;
+          }
         }
 
         console.log("[Orbitar Refine] Response is valid");
         const refined = response.refinedText || "";
+        // Persist refineEventId (if provided) for future behavior tracking calls
+        try {
+          const refineEventId = response.refineEventId || null;
+          if (refineEventId) {
+            console.log("[Orbitar Refine] refineEventId:", refineEventId);
+            try {
+              window.__orbitarLastRefineEventId = refineEventId;
+            } catch (_e) {}
+            try {
+              if (
+                chrome &&
+                chrome.storage &&
+                chrome.storage.local &&
+                chrome.storage.local.set
+              ) {
+                chrome.storage.local.set({
+                  orbitarLastRefineEventId: refineEventId,
+                });
+              }
+            } catch (_e) {}
+          } else {
+            console.warn("[Orbitar Refine] No refineEventId returned");
+          }
+        } catch (_e) {
+          console.warn("[Orbitar Refine] Failed to persist refineEventId");
+        }
         console.log("[Orbitar Refine] Refined text:", refined);
         console.log("[Orbitar Refine] Refined text length:", refined.length);
         console.log("[Orbitar Refine] Original text:", text);
+        // TODO(behavior): Detect accept/send event in the host UI (e.g., ChatGPT "send") and call /api/refine-events/behavior with { accepted: true }
+        // TODO(behavior): Detect revert-to-original or heavy edits and call /api/refine-events/behavior with { reverted: true } or { editDistanceBucket: "light" | "heavy" }
+        // Note: /api/refine-events/behavior requires a web session; the extension can store refineEventId and defer behavior updates to the web app or a future session-aware bridge.
 
         if ((refined || "").trim() === (text || "").trim()) {
           console.warn(

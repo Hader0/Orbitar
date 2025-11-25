@@ -124,6 +124,7 @@ import {
   QUALITY_BAR,
   DOMAIN_SNIPPETS,
   type DomainKey,
+  ATTACHMENT_USAGE_RULES,
 } from "./philosophy-snippets";
 import {
   type TemplateId,
@@ -273,19 +274,13 @@ CONTEXT TO MINE, not replacement tasks.
   // 6. Domain-specific guidance
   sections.push(domainSnippet);
 
-  // 7. Self-contained context packaging rules - CRITICAL for ensuring downstream model has all needed context
+  // 7. Attachment usage rules - attachments MUST be scanned and mined
+  sections.push(ATTACHMENT_USAGE_RULES);
+
+  // 8. Self-contained context packaging rules - CRITICAL for ensuring downstream model has all needed context
   sections.push(CONTEXT_PACKAGING_RULES);
 
-  // Attachment usage (internal example)
-  sections.push(
-    `
-Attachment usage (internal example):
-- WRONG: Produce a generic implementation plan that ignores attached files.
-- RIGHT: Reference files explicitly in context bullets, e.g. "FILE: PHILOSOPHY.md — Orbitar prompt philosophy and Prompt Lab design", and summarize 2–3 relevant concepts to anchor the plan.
-`.trim()
-  );
-
-  // 8. Quality bar
+  // 9. Quality bar
   sections.push(QUALITY_BAR);
 
   // 9. Template-specific output hints (as suggestions, not mandates)

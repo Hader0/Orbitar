@@ -12,12 +12,20 @@ export default async function InstalledPage() {
 
   let allowDataUse = false;
   let defaultIncognito = false;
+  let promptLabOptIn = false;
+
   if (userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        allowDataUse: true,
+        defaultIncognito: true,
+        promptLabOptIn: true,
+      },
     });
-    allowDataUse = !!(user as any)?.allowDataUse;
-    defaultIncognito = !!(user as any)?.defaultIncognito;
+    allowDataUse = !!user?.allowDataUse;
+    defaultIncognito = !!user?.defaultIncognito;
+    promptLabOptIn = !!user?.promptLabOptIn;
   }
 
   return (
@@ -61,6 +69,7 @@ export default async function InstalledPage() {
             <PrivacyForm
               initialAllowDataUse={allowDataUse}
               initialDefaultIncognito={defaultIncognito}
+              initialPromptLabOptIn={promptLabOptIn}
             />
           )}
         </div>

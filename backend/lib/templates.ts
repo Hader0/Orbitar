@@ -21,6 +21,8 @@ export type TemplateCategory =
   | "general";
 
 export type PlanName = "free" | "builder" | "pro";
+/** Centralized normalized plan keys used for Prompt Lab and logging */
+export type PlanKey = "free" | "light" | "pro" | "admin";
 
 export type TemplateStatus = "lab" | "experimental" | "beta" | "ga";
 
@@ -264,11 +266,11 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
       "a senior debugging specialist who systematically diagnoses and fixes issues",
     goalType: "diagnose and fix a bug or error",
     contextHints:
-      "Preserve error messages, stack traces, file names, line numbers, and reproduction steps verbatim",
+      "Preserve error messages, stack traces, file names, line numbers, and reproduction steps verbatim. Always include CODE and ERROR attachments by name and a short summary in the context when provided",
     outputHints:
       "Provide root cause analysis, the fix, and verification steps. Include code changes as diffs or complete files.",
     qualityRules:
-      "Explain the root cause. Propose minimal, targeted fixes. Avoid introducing new issues.",
+      "Explain the root cause. Propose minimal, targeted fixes. Avoid introducing new issues. Quality fail if provided CODE or ERROR attachments are not referenced and summarized",
   },
   coding_refactor: {
     baseRole:
@@ -312,7 +314,7 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
       "a skilled technical or content writer who creates engaging, well-structured articles about the subject provided by the user",
     goalType: "write a blog post or article about the user's specified topic",
     contextHints:
-      "Preserve the user's subject matter, key messages, examples, and audience context. Note any SEO or formatting requirements. The topic MUST come from user notes.",
+      "Preserve the user's subject matter, key messages, examples, and audience context. Note any SEO or formatting requirements. The topic MUST come from user notes. If FILEs or IMAGEs convey product philosophy or examples, summarize 2–4 relevant bullets into the context",
     outputHints:
       "First outline, then draft. Include intro, body sections, and conclusion. Specify word count if given. The content must be about the user's subject.",
     qualityRules:
@@ -324,7 +326,7 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     goalType:
       "write X/Twitter content (thread OR single post, depending on user request) about the subject defined in the user's TOP-LEVEL INSTRUCTION",
     contextHints:
-      "CRITICAL: The user's top-level instruction (before 'Below is...', 'Here's the...') defines the subject. Reference docs are CONTEXT TO MINE, not the task. Preserve user's subject matter (e.g., 'Orbitar'), key concepts, slogans, product/brand names. If user says 'single post' or 'viral post', produce exactly that, not a thread. If user mentions style ('viral', 'controversial', 'educational'), encode it as explicit tone guidance.",
+      "CRITICAL: The user's top-level instruction (before 'Below is...', 'Here's the...') defines the subject. Reference docs are CONTEXT TO MINE, not the task. Preserve user's subject matter (e.g., 'Orbitar'), key concepts, slogans, product/brand names. If user says 'single post' or 'viral post', produce exactly that, not a thread. If user mentions style ('viral', 'controversial', 'educational'), encode it as explicit tone guidance. If FILEs or IMAGEs contain product philosophy or examples, summarize 2–4 key bullets from them into the context",
     outputHints:
       "Default: numbered tweets, first hooks, last has CTA, each under 280 chars. BUT if user requests 'single post'/'one tweet'/'viral post', produce exactly one tweet. ALWAYS include a Key ideas/Context block in the refined prompt with 3-5 actual concept definitions from user's reference docs. Audience should be explicit if inferable (developers, founders, etc.).",
     qualityRules:
@@ -405,11 +407,11 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     baseRole: "a project lead who creates clear, actionable project plans",
     goalType: "create a roadmap or project plan",
     contextHints:
-      "Preserve scope, timeline constraints, dependencies, and any existing milestones",
+      "Preserve scope, timeline constraints, dependencies, and any existing milestones. If FILE: PHILOSOPHY.md or a similar attachment is present, summarize relevant sections (e.g., Prompt Lab, evaluation, shipping) as context bullets",
     outputHints:
       "Phases with milestones, key deliverables, dependencies, risks, and success criteria",
     qualityRules:
-      "Realistic timelines. Clear ownership. Explicit dependencies. Acknowledge risks.",
+      "Realistic timelines. Clear ownership. Explicit dependencies. Acknowledge risks. Quality fail if attachments are present and ignored or only named without embedding key content",
   },
   planning_feature_spec: {
     baseRole:
@@ -489,7 +491,7 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     outputHints:
       "Define role, goal, constraints, and a concrete output contract for the downstream model (format, sections, length bounds). If the user asks 'Give me X' / 'Write Y' / 'Generate Z', rewrite that as the downstream model's goal and specify the deliverable precisely.",
     qualityRules:
-      "NEVER perform the task yourself (no long lists, full articles/emails, or large code). Small illustrative examples (1–3 items/snippets) allowed only to clarify intent and must not satisfy the request. On minimal-input tasks (e.g., only a topic), do NOT invent domain-specific facts or statistics in the Context block—express structure (audience, tone, sections or topics to cover) rather than factual claims the user did not provide. Quality fail if the refined prompt contains a full answer that fulfills the user's ask.",
+      "NEVER perform the task yourself (no long lists, full articles/emails, or large code). Small illustrative examples (1–3 items/snippets) allowed only to clarify intent and must not satisfy the request. On minimal-input tasks (e.g., only a topic), do NOT invent domain-specific facts or statistics in the Context block—express structure (audience, tone, sections or topics to cover) rather than factual claims the user did not provide. Quality fail if the refined prompt contains a full answer that fulfills the user's ask. If attachments are present, summarize and embed their key content; quality fail if you ignore attachments or mention them without embedding essentials.",
   },
 };
 
@@ -537,6 +539,79 @@ export function getCategoryDefaultTemplate(
     general: "general_general",
   };
   return defaults[category] || "general_general";
+}
+
+/**
+ * Template slug registry (normalized identity: category_scope_variant).
+ * We keep existing TemplateId values for API compatibility and derive a slug
+ * by appending "_default" for the current GA variant of each template.
+ */
+export type TemplateSlug =
+  | "coding_feature_default"
+  | "coding_debug_default"
+  | "coding_refactor_default"
+  | "coding_tests_default"
+  | "coding_explain_default"
+  | "writing_blog_default"
+  | "writing_twitter_thread_default"
+  | "writing_linkedin_post_default"
+  | "writing_email_default"
+  | "writing_landing_page_default"
+  | "research_summarize_default"
+  | "research_compare_default"
+  | "research_extract_points_default"
+  | "planning_roadmap_default"
+  | "planning_feature_spec_default"
+  | "planning_meeting_notes_default"
+  | "communication_reply_default"
+  | "communication_tone_adjust_default"
+  | "creative_story_default"
+  | "creative_brainstorm_default"
+  | "general_general_default";
+
+/**
+ * Map existing TemplateId (compat) to a normalized slug form for logging.
+ * Current GA variant is "default" for all.
+ */
+export function getTemplateSlug(templateId: TemplateId): TemplateSlug {
+  return `${templateId}_default` as TemplateSlug;
+}
+
+/**
+ * Version registry for all GA templates.
+ * All start at "1.0.0" and can be bumped per slug in the future.
+ */
+export const templateVersionRegistry: Record<TemplateSlug, string> = {
+  coding_feature_default: "1.0.0",
+  coding_debug_default: "1.0.0",
+  coding_refactor_default: "1.0.0",
+  coding_tests_default: "1.0.0",
+  coding_explain_default: "1.0.0",
+  writing_blog_default: "1.0.0",
+  writing_twitter_thread_default: "1.0.0",
+  writing_linkedin_post_default: "1.0.0",
+  writing_email_default: "1.0.0",
+  writing_landing_page_default: "1.0.0",
+  research_summarize_default: "1.0.0",
+  research_compare_default: "1.0.0",
+  research_extract_points_default: "1.0.0",
+  planning_roadmap_default: "1.0.0",
+  planning_feature_spec_default: "1.0.0",
+  planning_meeting_notes_default: "1.0.0",
+  communication_reply_default: "1.0.0",
+  communication_tone_adjust_default: "1.0.0",
+  creative_story_default: "1.0.0",
+  creative_brainstorm_default: "1.0.0",
+  general_general_default: "1.0.0",
+} as const;
+
+/**
+ * Return the current GA version string for a templateId (compat).
+ * Falls back to "1.0.0" if an unknown id slips through.
+ */
+export function getTemplateVersion(templateId: TemplateId): string {
+  const slug = getTemplateSlug(templateId);
+  return templateVersionRegistry[slug] ?? "1.0.0";
 }
 
 // ============================================================================
