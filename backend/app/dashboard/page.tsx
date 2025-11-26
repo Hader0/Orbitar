@@ -8,6 +8,7 @@ import { DashboardNotice } from "./DashboardNotice";
 import UsageCard from "./UsageCard";
 import PrivacyCard from "./PrivacyCard";
 import UpgradeCard from "./UpgradeCard";
+import { getPlanKeyForUser, planLabel } from "@/lib/plan";
 
 export default async function Dashboard({
   searchParams,
@@ -26,6 +27,23 @@ export default async function Dashboard({
   });
 
   if (!user) return <div>User not found</div>;
+
+  // Canonical plan mapping (admin email => "admin")
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+  const planKey = getPlanKeyForUser(
+    { plan: user.plan, email: user.email },
+    ADMIN_EMAIL
+  );
+  const planName = planLabel(planKey);
+
+  // Limits keyed by canonical plan (admin treated as pro for limits)
+  const LIMITS: Record<typeof planKey, number> = {
+    free: 5,
+    light: 75,
+    pro: 500,
+    admin: 500,
+  };
+  const limit = LIMITS[planKey] ?? 10;
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -50,14 +68,12 @@ export default async function Dashboard({
           <h2 className="text-xl font-semibold mb-4">Current Plan</h2>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-2xl font-bold capitalize">{user.plan}</p>
+              <p className="text-2xl font-bold">{planName}</p>
               <p className="text-gray-500">
-                {user.dailyUsageCount} /{" "}
-                {user.plan === "free" ? 10 : user.plan === "builder" ? 75 : 500}{" "}
-                requests used today
+                {user.dailyUsageCount} / {limit} requests used today
               </p>
             </div>
-            {user.plan !== "pro" && <CheckoutButtons />}
+            {planKey !== "pro" && planKey !== "admin" && <CheckoutButtons />}
           </div>
         </div>
 
@@ -67,9 +83,7 @@ export default async function Dashboard({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm text-zinc-600">Plan</div>
-              <div className="text-lg font-semibold capitalize">
-                {user.plan}
-              </div>
+              <div className="text-lg font-semibold">{planName}</div>
             </div>
             <div className="text-right">
               <div className="text-sm text-zinc-600">Status</div>
@@ -111,7 +125,9 @@ export default async function Dashboard({
         </div>
 
         <div>
-          <UpgradeCard currentPlan={user.plan} />
+          <UpgradeCard
+            currentPlan={planKey === "admin" ? "pro" : (planKey as any)}
+          />
         </div>
 
         {/* API Keys */}

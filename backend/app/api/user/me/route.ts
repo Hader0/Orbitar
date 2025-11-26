@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getPlanKeyForUser, planLabel } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,13 +49,19 @@ export async function GET(req: NextRequest) {
       return jsonCors({ error: "Invalid API key" }, 401);
     }
 
-    const PLAN_LIMITS: Record<string, number> = {
-      free: 5,
-      builder: 75,
-      pro: 500,
-    };
+    // Canonical plan resolution (admin email always maps to "admin")
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+    const planKey = getPlanKeyForUser(apiKey.user as any, ADMIN_EMAIL);
+    const planName = planLabel(planKey);
 
-    const limit = PLAN_LIMITS[apiKey.user.plan] || 10;
+    // Limits keyed by canonical plan (admin treated as pro for limits)
+    const LIMITS: Record<typeof planKey, number> = {
+      free: 5,
+      light: 75,
+      pro: 500,
+      admin: 500,
+    };
+    const limit = LIMITS[planKey] ?? 10;
     const now = new Date();
     const resetTime = new Date(apiKey.user.dailyUsageResetAt);
 
@@ -63,7 +70,11 @@ export async function GET(req: NextRequest) {
 
     return jsonCors(
       {
+        // Preserve original plan field for backward compatibility
         plan: apiKey.user.plan,
+        // New canonical fields
+        planKey,
+        planName,
         dailyUsageCount,
         limit,
         // expose privacy flags for potential frontend use

@@ -340,10 +340,12 @@ function showIntegratedPanel() {
   let usedCount = 0;
   let planLimit = 5; // Free user default
   sendMessageSafe({ type: "GET_USER_PLAN" }, (resp) => {
-    if (resp && resp.plan) {
-      const planName = resp.plan.charAt(0).toUpperCase() + resp.plan.slice(1);
+    if (resp && (resp.plan || resp.planKey)) {
+      const planKey = (resp.planKey || resp.plan || "free").toLowerCase();
+      const planName =
+        resp.planName || planKey.charAt(0).toUpperCase() + planKey.slice(1);
       planBadge.textContent = planName;
-      planBadge.setAttribute("data-plan", resp.plan);
+      planBadge.setAttribute("data-plan", planKey);
 
       if (
         typeof resp.dailyUsageCount === "number" &&
@@ -353,12 +355,18 @@ function showIntegratedPanel() {
         planLimit = resp.limit;
       } else {
         usedCount = 0;
-        planLimit = 5;
+        // fallback mapping if backend didn't provide limit
+        planLimit =
+          planKey === "light"
+            ? 75
+            : planKey === "pro" || planKey === "admin"
+            ? 500
+            : 5;
       }
 
       const remaining = Math.max(0, planLimit - usedCount);
-      const plan = resp.plan || "free";
-      const suffix = plan === "free" ? " left today" : "";
+      const planKeyEff = planKey;
+      const suffix = planKeyEff === "free" ? " left today" : "";
       usageText.textContent = `${remaining} / ${planLimit}${suffix}`;
       usageText.setAttribute(
         "title",
@@ -368,7 +376,7 @@ function showIntegratedPanel() {
       try {
         const pill = planBadge.parentElement;
         if (pill) {
-          pill.setAttribute("data-plan", resp.plan);
+          pill.setAttribute("data-plan", planKey);
         }
       } catch (_e) {}
     } else {

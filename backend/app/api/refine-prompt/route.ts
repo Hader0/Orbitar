@@ -24,6 +24,8 @@ import {
 } from "@/lib/templates";
 import { RefineEngine, type RefineRequest } from "@/lib/refine-engine";
 import type { UserPlanKey } from "@/lib/model-router";
+import { getPlanKeyForUser } from "@/lib/plan";
+import { logPromptLedgerEvent } from "@/lib/prompt-ledger";
 
 // ============================================================================
 // Configuration
@@ -175,6 +177,8 @@ export async function POST(req: NextRequest) {
   let effectiveIncognito: boolean =
     (user as Record<string, unknown>)?.defaultIncognito === true;
 
+  let planForLab: PlanKey = "free";
+
   try {
     const body = await req.json();
     const {
@@ -233,20 +237,21 @@ export async function POST(req: NextRequest) {
 
     // Derive user plan key for routing (lightweight mapping)
     // TODO: Thread richer plan info if/when available (e.g. enterprise tiers)
-    const planRaw = (user.plan || "").toLowerCase();
-    let userPlanKey: UserPlanKey = "unknown";
-    if (planRaw === "free") userPlanKey = "free";
-    else if (planRaw === "builder" || planRaw === "light")
-      userPlanKey = "light";
-    else if (planRaw === "pro") userPlanKey = "pro";
-    else if (planRaw === "enterprise") userPlanKey = "enterprise";
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+    const canonicalPlan = getPlanKeyForUser(user as any, ADMIN_EMAIL);
 
-    // Normalized plan key for Prompt Lab logging
-    let planForLab: PlanKey = "free";
-    if (planRaw === "free") planForLab = "free";
-    else if (planRaw === "builder" || planRaw === "light") planForLab = "light";
-    else if (planRaw === "pro") planForLab = "pro";
-    else if (planRaw === "admin") planForLab = "admin";
+    // Route models using coarse keys; map admin to pro for routing purposes
+    let userPlanKey: UserPlanKey =
+      canonicalPlan === "free"
+        ? "free"
+        : canonicalPlan === "light"
+        ? "light"
+        : canonicalPlan === "pro"
+        ? "pro"
+        : /* admin */ "pro";
+
+    // Canonical plan for Prompt Lab logging
+    planForLab = canonicalPlan as PlanKey;
 
     // 6. Run Refine Engine
     const start = Date.now();
@@ -400,6 +405,11 @@ export async function POST(req: NextRequest) {
     const result = await engine.refine(refineRequest);
     const latencyMs = Date.now() - start;
 
+    // Precompute lengths for downstream logging (DB + Prompt Ledger)
+    const rawTextLength = typeof text === "string" ? text.length : 0;
+    const refinedTextLength =
+      typeof result.refinedText === "string" ? result.refinedText.length : 0;
+
     // 7. Handle Incognito Flag
     if (typeof incognitoRaw === "boolean") {
       effectiveIncognito = incognitoRaw;
@@ -409,11 +419,11 @@ export async function POST(req: NextRequest) {
 
     // 8. Log Events (non-blocking)
     try {
-      // Legacy event for dashboards
+      // Legacy event for dashboards (DB)
       await prisma.promptEvent.create({
         data: {
           userId: user.id,
-          plan: user.plan,
+          plan: planForLab,
           source: typeof source === "string" ? source : null,
           category: categoryUsed,
           templateId: templateId,
@@ -427,10 +437,37 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Prompt Lab: refine_events row
-      const rawTextLength = typeof text === "string" ? text.length : 0;
-      const refinedTextLength =
-        typeof result.refinedText === "string" ? result.refinedText.length : 0;
+      // Prompt Ledger (GCS NDJSON, non-blocking best-effort)
+      (async () => {
+        try {
+          await logPromptLedgerEvent({
+            userId: user.id,
+            plan: planForLab,
+            category: categoryUsed,
+            templateSlug: getTemplateSlug(templateId),
+            templateVersion: templateVersion,
+            promptLabOptIn:
+              ((user as any)?.promptLabOptIn as boolean | undefined) ?? false,
+            isIncognito: !!effectiveIncognito,
+            source: typeof source === "string" ? `extension:${source}` : "api",
+            inputTokens: result.usage?.inputTokens ?? null,
+            outputTokens: result.usage?.outputTokens ?? null,
+            latencyMs,
+            model: "openrouter",
+            status: "success",
+            rawText: typeof text === "string" ? text : "",
+            refinedText:
+              typeof result.refinedText === "string" ? result.refinedText : "",
+            rawTextLength,
+            refinedTextLength,
+          });
+        } catch (e) {
+          // logPromptLedgerEvent already swallows errors; this is just in case of unexpected caller error
+          console.error("[PromptLedgerCaller] Failed", e);
+        }
+      })();
+
+      // Prompt Lab: refine_events row (DB)
       const promptLabOptIn =
         ((user as any)?.promptLabOptIn as boolean | undefined) ?? false;
 
@@ -483,12 +520,12 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Refine error:", error);
 
-    // Log failure event
+    // Log failure event (DB) and Prompt Ledger (GCS)
     try {
       await prisma.promptEvent.create({
         data: {
           userId: user.id,
-          plan: user.plan,
+          plan: planForLab,
           source: null,
           category: null,
           templateId: null,
@@ -504,6 +541,34 @@ export async function POST(req: NextRequest) {
     } catch (logErr) {
       console.error("PromptEvent log error (failure path):", logErr);
     }
+
+    // Fire-and-forget Prompt Ledger error record
+    (async () => {
+      try {
+        await logPromptLedgerEvent({
+          userId: user.id,
+          plan: planForLab,
+          category: "unknown",
+          templateSlug: "unknown",
+          templateVersion: "unknown",
+          promptLabOptIn:
+            ((user as any)?.promptLabOptIn as boolean | undefined) ?? false,
+          isIncognito: !!effectiveIncognito,
+          source: "api",
+          inputTokens: null,
+          outputTokens: null,
+          latencyMs: null,
+          model: "openrouter",
+          status: "error_internal",
+          rawText: "", // avoid content on error path by default
+          refinedText: "",
+          rawTextLength: null,
+          refinedTextLength: null,
+        });
+      } catch (e) {
+        console.error("[PromptLedgerCaller] Failed (error path)", e);
+      }
+    })();
 
     return jsonCors(
       {

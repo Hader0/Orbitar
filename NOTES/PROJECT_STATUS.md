@@ -115,6 +115,10 @@ This checklist summarizes what is implemented vs. still pending, based on the cu
 
 - Prompt Lab data & metrics
 
+  - [x] Read-only Prompt Lab admin view at `/admin/prompt-lab` (top-level stats + template leaderboard)
+  - [x] Dev seed tools embedded (disabled in production): SyntheticTask + PromptSample
+  - [x] Lab runner v0 (dev-only) and heuristic scoring (structure/contract/domain/overall)
+
   - [ ] Populate core Lab tables (`synthetic_tasks`, `prompt_samples`, `lab_runs`, `lab_scores`) with real data
   - [ ] Nightly/periodic jobs to run Lab tasks and compute scores off `RefineEvent` + synthetic/user samples
   - [ ] Admin views for Lab runs/scores (leaderboard, drilldown, explorer)
@@ -438,16 +442,17 @@ This is the R&D view of Prompt Lab.
 
 Data/model work:
 
-- [ ] Extend `RefineEvent` with:
+- [x] Extend `RefineEvent` with:
   - `acceptedAt`
   - `reverted`
   - `editDistanceBucket` (`"none" | "light" | "heavy"`)
-- [ ] Add Prompt Lab–specific tables:
+- [x] Add Prompt Lab–specific tables:
   - `synthetic_tasks`
   - `prompt_samples`
   - `lab_runs`
   - `lab_scores`
-  - (Optional) `template_version_daily_metrics` materialized view
+- [ ] (Optional) Add aggregated/materialized metrics views such as
+  - `template_version_daily_metrics` for quicker dashboard queries.
 
 UX work:
 
@@ -464,8 +469,11 @@ UX work:
 
 Operational:
 
-- [ ] Decide a cadence for Lab runs (nightly/weekly).
-- [ ] Ensure `PROMPT_LAB_CHANGELOG.md` gets a one-line entry for each schema/behavior change so graphs can be interpreted historically.
+- [ ] Decide a cadence for Lab runs (nightly/weekly) and how they’re triggered.
+- [ ] Implement jobs/pipelines to:
+  - Populate `synthetic_tasks` and `prompt_samples`.
+  - Create `lab_runs` and `lab_scores` for selected template versions.
+- [ ] Keep `PROMPT_LAB_CHANGELOG.md` updated for each schema/behavior change so graphs can be interpreted historically.
 
 ---
 
@@ -619,6 +627,175 @@ After installing the extension (and ideally on first login to the web app), user
 
 ---
 
+### 3.4 Prompt Ledger & Cloud-Agnostic Storage
+
+Goal: capture every refinement event in a portable, provider-agnostic way, so Orbitar can (a) keep a complete history of prompts and (b) move that history between GCP accounts or even clouds in the future.
+
+#### 3.4.1 Prompt Ledger – append-only event log
+
+Orbitar maintains a **Prompt Ledger**: an append-only log of every refinement event.
+
+**Storage:**
+
+- Primary store: a Cloud Storage bucket, e.g. `orbitar-prompt-ledger`.
+- Layout: partitioned by date for easy querying and movement, e.g.:
+
+  - `logs/year=2025/month=11/day=25/part-00001.ndjson`
+  - `logs/year=2025/month=11/day=25/part-00002.ndjson`, etc.
+
+- Format: **NDJSON** (newline-delimited JSON). Each line = one refine event.
+
+**Event shape (conceptual):**
+
+This closely mirrors `PromptEvent` and `RefineEvent` in the DB so everything stays in sync:
+
+````jsonc
+{
+  "eventId": "uuid",
+  "timestamp": "2025-11-25T10:23:45Z",
+  "userId": "user_xxx",            // internal ID or hash, never raw email
+  "plan": "light",                 // free | light | pro | admin
+  "source": "extension:chatgpt",   // where the refine happened
+  "category": "writing",
+  "templateSlug": "writing_x",
+  "templateVersion": "1.0.0",
+
+  "promptLabOptIn": true,
+  "isIncognito": false,
+
+  "rawTextLength": 2743,
+  "refinedTextLength": 932,
+  "inputTokens": 800,
+  "outputTokens": 220,
+  "latencyMs": 2135,
+  "model": "gpt-5.1-codex",
+
+  // Only present when allowed by privacy rules (see below)
+  "rawText": "user's messy input, anonymized",
+  "refinedText": "final refined prompt, anonymized"
+}
+Two layers of data:
+
+Meta-only (always logged):
+
+Plan, category, templateSlug, templateVersion
+
+Source, timings, token counts, error status, flags
+
+Content snapshots (conditional):
+
+rawText and/or refinedText, only when:
+
+promptLabOptIn = true
+
+isIncognito = false
+
+Text has passed the anonymization/redaction pipeline described in §3.2
+
+This gives Orbitar a complete behavioral history while still respecting privacy and Incognito guarantees.
+
+3.4.2 Analytics layer – BigQuery as a view, not the source of truth
+On top of the Prompt Ledger bucket, Orbitar uses BigQuery as an analytics and Prompt Lab driver:
+
+Dataset: prompt_lab
+
+Table: prompt_events (partitioned, optionally external table over the bucket or periodically loaded)
+
+BigQuery is used for:
+
+Dashboard queries (user + admin + Prompt Lab views)
+
+Sampling data for background experiments
+
+Quick ad-hoc analysis (e.g., “show me all writing_x prompts from Pro users last 7 days”)
+
+However, the canonical record is the NDJSON in Cloud Storage. If we ever change warehouses (new GCP project, different cloud, local analysis), we can:
+
+Rebuild tables by re-importing from the bucket.
+
+Or stream the NDJSON elsewhere entirely.
+
+3.4.3 Portability across GCP accounts and clouds
+Because the Prompt Ledger is just NDJSON in a bucket:
+
+Moving to a new GCP project/account:
+
+gsutil cp gs://old-bucket/... gs://new-bucket/...
+
+Update env vars: PROMPT_LEDGER_BUCKET, BIGQUERY_PROJECT_ID, etc.
+
+Moving off GCP:
+
+Sync the bucket to another provider (S3, R2, local disk) and rebuild analytics there.
+
+This directly supports the goal of keeping every prompt and still being able to “store it elsewhere later” without locking Orbitar into a single GCP account or vendor.
+
+3.4.4 Interaction with Prompt Lab
+Prompt Lab consumes data from two places:
+
+Prompt Ledger / prompt_events for:
+
+Usage patterns, plan/category/template stats
+
+Candidate samples per template/version
+
+Prompt Lab–specific tables (synthetic_tasks, prompt_samples, lab_runs, lab_scores) for:
+
+Controlled experiments
+
+Judge scores (heuristic + Vertex)
+
+Version-to-version comparisons
+
+The ledger is the long-term brainstem; Prompt Lab is the R&D cortex sitting on top of it.
+
+vbnet
+Copy code
+
+---
+
+## 2️⃣ Optional future-direction subsection under “4. Background ‘Prompt Lab’ Agents”
+
+If you want the doc to explicitly encode the “no-template / learned-from-best-prompts” direction, add this at the end of section 4 as **4.5 Prompt Memory & Retrieval (Future Direction)**:
+
+```md
+### 4.5 Prompt Memory & Retrieval (Future Direction)
+
+Long-term, Orbitar should be able to learn from its own successes instead of relying only on hand-authored templates.
+
+**Idea:** use Prompt Lab + Prompt Ledger to build a **Prompt Memory** layer:
+
+- For each category/template, store:
+  - Refined prompts that scored highly in LabRuns.
+  - Real-world prompts with strong acceptance/low-edit behavior.
+  - Their associated metadata (task type, domain, model, plan).
+
+Over time, this becomes a bank of **“elite prompts”** that empirically work well.
+
+Future refinement path:
+
+1. User sends messy text and clicks Refine.
+2. Refine engine:
+   - Classifies the task (coding debug, blog post, X thread, etc.).
+   - Retrieves a small set of high-performing refined prompts from Prompt Memory that match the task.
+3. The model sees:
+   - User’s raw text.
+   - Orbitar’s philosophy + core rules.
+   - 2–3 retrieved “winner” prompts as patterns/examples.
+4. It synthesizes a new refined prompt that:
+   - Keeps user-specific context and constraints.
+   - Respects Orbitar’s contract (10-second bar, context packaging, etc.).
+   - Borrows structure/phrasing from what has already been proven to work.
+
+In this world, the current **TemplateBehavior configs** act as:
+
+- A **strong prior / fallback** for new or rare tasks.
+- A safety net when retrieval has little or no data.
+
+Prompt Memory + retrieval lets Orbitar gradually shift from **hand-designed behavior presets** toward **learned, data-driven prompt patterns**, while still staying debuggable and controllable.
+
+---
+
 ## 4. Background “Prompt Lab” Agents
 
 Background agents exist primarily for **R&D and testing**, not as your core marketing claim.
@@ -704,11 +881,11 @@ Prompt Lab does **not**:
 
 #### Settings toggle (short form)
 
-- **Label**:  
+- **Label**:
   `Help improve Orbitar’s templates (Prompt Lab)`
 
-- **Subtext (2 lines)**:  
-  `Uses a sample of your prompts to test better prompt templates.`  
+- **Subtext (2 lines)**:
+  `Uses a sample of your prompts to test better prompt templates.`
   `Anonymized & time-limited. Incognito is never included.`
 
   ### 4.4 Prompt Lab Changelog Discipline
@@ -965,4 +1142,169 @@ _Goal: Deploy the app for real users._
 5. **Legal & Compliance**
    - [ ] Add Privacy Policy and Terms of Service pages (required for Google OAuth and Chrome Web Store).
    - [ ] Document data collection, anonymization, and retention policies clearly.
-```
+````
+
+## 11. 12-Week Prompt Lab & GCP Rollout Plan
+
+Goal: use the next ~12 weeks and ~$300 in GCP credits to turn Prompt Lab from “v0 works” into a real, continuously-running, Vertex-judged template engine that clearly improves refinement quality.
+
+This plan assumes:
+
+- Refinement stays on OpenAI/OpenRouter.
+- Prompt Lab batches (LabRun/LabScore) run on a dedicated Cloud Run worker.
+- Vertex AI is used as a **judge** for a subset of runs, with results stored in extra fields.
+
+---
+
+### Week 1–2: Solidify Infra & Cadence
+
+**Focus:** Get the Cloud Run worker and Scheduler reliably running, with heuristic scoring only.
+
+- [ ] Finish GCP one-time setup (if not already done):
+
+  - Project + APIs (Cloud Run, Cloud Build, Scheduler, Artifact Registry, Secret Manager).
+  - Artifact Registry repo created (e.g. `prompt-lab`).
+  - Service account for `prompt-lab-worker` with Secret Manager + Cloud Run Invoker.
+
+- [ ] Build & deploy Prompt Lab worker to Cloud Run using `Dockerfile.prompt-lab`:
+
+  - Image in Artifact Registry: `$REGION-docker.pkg.dev/$PROJECT_ID/prompt-lab/prompt-lab-worker:latest`.
+  - Env/secrets wired:
+    - `DATABASE_URL` via Secret Manager.
+    - `OPENROUTER_API_KEY` (or equivalent) via Secret Manager.
+    - `NODE_ENV=production`, `LAB_BATCH_LIMIT` (start ~10–20).
+
+- [ ] Create Cloud Scheduler job:
+
+  - Cron: `0 * * * *` (hourly) or start with `0 3 * * *` (nightly).
+  - HTTP POST to Cloud Run URL with OIDC auth.
+  - Verify in logs:
+    - `[PromptLabCron] Starting Lab batch { limit: ... }`
+    - `[PromptLabCron] Completed Lab batch { runsCreated, scoresCreated }`.
+
+- [ ] Monitor dev DB:
+  - Confirm `LabRun` / `LabScore` counts steadily increase.
+  - Check no obvious failure patterns or runaway error logging.
+
+---
+
+### Week 3–4: Wire Vertex Judge Fields & Stubs
+
+**Focus:** Extend schema + code so Vertex-based judging can plug in cleanly, even if initial calls are manual/limited.
+
+- [ ] Extend `LabScore` model with judge fields (Prisma migration):
+
+  - `judgeModel       String?` // e.g. "vertex:gemini-1.5-pro"
+  - `judgeScore       Float?` // 0–1 or normalized 0–10
+  - `judgeExplanation String?` // short rationale
+
+- [ ] Create `lib/promptLabVertexJudge.ts`:
+
+  - Input: `{ category, templateSlug, templateVersion, rawText, refinedPrompt, heuristicScores }`.
+  - Output: `{ judgeModel, judgeScore, judgeExplanation }`.
+  - Initially:
+    - Stub with a **fake/local** scoring function that just wraps heuristic scores.
+    - Keep the surface area stable for when Vertex is added.
+
+- [ ] Add `scripts/runPromptLabJudgeBatch.ts`:
+
+  - Finds recent `LabScore` rows where `judgeScore IS NULL`.
+  - Joins to `LabRun` + underlying `PromptSample`/`SyntheticTask`.
+  - Calls `promptLabVertexJudge` and updates `LabScore`.
+  - Logging prefix: `[PromptLabJudge] ...`.
+
+- [ ] Add `"lab:judge-batch"` npm script and (optionally) a second Dockerfile or `LAB_MODE=judge` branch.
+
+- [ ] Run judge batches locally against a small set and validate:
+  - No crashes, fields populated as expected.
+  - Judge scores/explanations look sane (even if stubbed).
+
+---
+
+### Week 5–8: Integrate Real Vertex AI & Focus on High-Impact Templates
+
+**Focus:** Start actually burning GCP credits, but surgically, where it matters.
+
+- [ ] Enable Vertex AI in the GCP project and set up auth for the worker:
+
+  - Service account with Vertex AI permissions.
+  - Vertex endpoint & model name configured via env (e.g. `VERTEX_JUDGE_MODEL`).
+
+- [ ] Replace stub logic in `promptLabVertexJudge.ts` with real Vertex model calls:
+
+  - Build a **strict JSON-returning prompt** for the judge:
+    - Inputs: raw user text, refined prompt, category, template slug/version, heuristic scores.
+    - Output: `{ "score": number between 0 and 1, "explanation": "..." }`.
+  - Parse safely; defensive checks on malformed JSON.
+
+- [ ] Budget strategy (to stretch credits over ~3 months):
+
+  - Start with **low daily cap**:
+    - e.g. 50–100 judge calls/day.
+  - Only judge **interesting** samples:
+    - New template versions.
+    - Runs where heuristic `overallScore` is mid-range (e.g. 0.3–0.7).
+    - Categories/templates you care most about (coding_feature, writing_blog, planning_roadmap, etc.).
+
+- [ ] Update `/admin/prompt-lab` to surface judge metrics (read-only v0):
+
+  - For each template/version:
+    - Show `avg judgeScore` and `N judged`.
+  - A simple table or column added to the leaderboard is fine.
+
+- [ ] Start template improvement cycles:
+
+  - Pick 2–3 templates per category (coding/writing/planning/research).
+  - Review:
+    - Heuristic scores.
+    - Judge scores.
+    - Heavy-edit rates (once tracked).
+  - Draft improved template variants (bump version: `1.0.0 → 1.1.0`) and mark them as internal/beta.
+
+---
+
+### Week 9–12: A/B Template Evaluation & Lock-In of “Better Than 10-Second” Prompts
+
+**Focus:** Use the data to actually make Orbitar’s templates meaningfully better and lock in improvements.
+
+- [ ] For top templates, run focused A/B comparisons:
+
+  - Take old version (e.g. `coding_feature_default@1.0.0`) and new version (`1.1.0`).
+  - Run both on the same synthetic tasks + a sample of real prompts (opt-in, non-incognito).
+  - Compare:
+    - Heuristic `overallScore`.
+    - Vertex `judgeScore`.
+    - Real-world acceptance/edit metrics (once behavior API is wired to UX).
+
+- [ ] Promotion rules (can be written into docs/UI later):
+
+  - Promote `1.1.0` to GA if:
+    - JudgeScore is significantly higher (e.g. +0.1 or more).
+    - Acceptance is not worse and heavy-edit rate is lower or stable.
+  - If results are mixed, iterate once more (1.2.0) with targeted changes.
+
+- [ ] Use Prompt Lab results to drive template registry updates:
+
+  - Update `templateVersionRegistry` for promoted versions.
+  - Mark underperforming templates as **deprecated** or demoted to experimental.
+  - Record major changes in `PROMPT_LAB_CHANGELOG.md` with clear, dated entries.
+
+- [ ] Tighten the loop with the Master Dashboard:
+
+  - Add basic charts/tables that combine:
+    - `usage` + `acceptance/edit` + `judgeScore` for each template version.
+  - Identify:
+    - “Hero” templates (high usage, high judgeScore, low heavy-edit).
+    - “Problem” templates (high usage, low judgeScore, high heavy-edit).
+
+- [ ] End-of-credits checkpoint (~3 months):
+
+  - Summarize:
+
+    - # of LabRuns, LabScores, judged samples.
+    - Improvements in acceptance/heavy-edit metrics vs starting point.
+    - Template versions that clearly beat the “10-second bar”.
+
+  - Use this summary for:
+    - Internal confidence that Prompt Lab is **actually** working.
+    - External marketing narrative about “continuously optimized templates trained on real-world usage (with explicit opt-in and anonymization).”

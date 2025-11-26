@@ -1,0 +1,21 @@
+# backend/Dockerfile.prompt-lab
+# Minimal worker image to run a single Prompt Lab batch and exit
+FROM node:20-slim
+
+# Create app directory
+WORKDIR /app
+
+# Install dependencies (include dev deps because we use ts-node at runtime)
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy app source
+COPY . .
+
+# Build Next app so imports/types are consistent (even though we only use server libs)
+# If build requires env, ensure Cloud Build injects minimal placeholders or skip non-critical steps.
+RUN npm run build
+
+# Environment variables (DATABASE_URL, OPENROUTER_API_KEY, LAB_BATCH_LIMIT) will be provided by Cloud Run
+# Run a single batch and exit
+CMD ["npm", "run", "lab:run-batch"]
