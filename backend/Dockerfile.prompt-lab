@@ -1,21 +1,26 @@
 # backend/Dockerfile.prompt-lab
-# Minimal worker image to run a single Prompt Lab batch and exit
-FROM node:20-slim
+# Minimal worker image to run a long-running HTTP worker for Prompt Lab (Cloud Run)
+FROM node:22-alpine
 
 # Create app directory
 WORKDIR /app
 
-# Install dependencies (include dev deps because we use ts-node at runtime)
+# Copy package manifests and install (include dev deps so `tsx` is available)
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --silent
 
 # Copy app source
 COPY . .
 
-# Build Next app so imports/types are consistent (even though we only use server libs)
-# If build requires env, ensure Cloud Build injects minimal placeholders or skip non-critical steps.
+# Build Next app so imports/types are consistent (helps with TypeScript in server code)
 RUN npm run build
 
-# Environment variables (DATABASE_URL, OPENROUTER_API_KEY, LAB_BATCH_LIMIT) will be provided by Cloud Run
-# Run a single batch and exit
-CMD ["npm", "run", "lab:run-batch"]
+# Expose default Cloud Run port
+ENV PORT 8080
+EXPOSE 8080
+
+# Run in production mode (dev deps are already installed during build)
+ENV NODE_ENV=production
+
+# Start the HTTP server using tsx (installed in node_modules)
+CMD ["npx", "tsx", "scripts/promptLabCronServer.ts"]

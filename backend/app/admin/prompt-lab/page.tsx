@@ -303,125 +303,161 @@ async function runLabBatchAction(_formData: FormData) {
 // -----------------------------
 
 async function loadStats() {
-  // Top-level stats
-  const totalRefines = await prisma.refineEvent.count();
-  const distinctTemplates = await prisma.refineEvent.groupBy({
-    by: ["templateId"],
-    _count: { _all: true },
-  });
-  const optInCount = await prisma.refineEvent.count({
-    where: { promptLabOptIn: true },
-  });
-  const incognitoCount = await prisma.refineEvent.count({
-    where: { isIncognito: true },
+  // Aggregate LabRun + LabScore (v0 leaderboard)
+  // Keep this server-side and defensive for dev usage.
+
+  // Totals
+  const totalLabRuns = await prisma.labRun.count();
+  const totalLabScores = await prisma.labScore.count();
+
+  // Fetch recent LabScores with their LabRun; safe default ordering
+  const labScores = await prisma.labScore.findMany({
+    include: { labRun: true },
+    orderBy: { createdAt: "desc" },
   });
 
-  // Per-(templateId, templateVersion) usage
-  const byUsage = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    _count: { _all: true },
-  });
+  // Map by templateSlug + templateVersion
+  type RowAgg = {
+    templateSlug: string;
+    templateVersion: string;
+    usageCount: number; // number of LabScore rows associated
+    runCount: number; // number of LabRun rows seen
+    sampleCount: number;
+    syntheticCount: number;
+    sumStructure: number;
+    sumContract: number;
+    sumDomain: number;
+    sumOverall: number;
+    countStructure: number;
+    countContract: number;
+    countDomain: number;
+    countOverall: number;
+    lastRunAt: Date | null;
+  };
 
-  // Conditional grouped counts
-  const byAccepted = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    where: { acceptedAt: { not: null } },
-    _count: { _all: true },
-  });
+  const map = new Map<string, RowAgg>();
 
-  const byReverted = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    where: { reverted: true },
-    _count: { _all: true },
-  });
+  // helper to ensure we count runs once per labRun id
+  const seenRunIds = new Set<string>();
 
-  const byHeavy = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    where: { editDistanceBucket: "heavy" },
-    _count: { _all: true },
-  });
+  for (const s of labScores) {
+    const run = (s as any).labRun as any | null;
+    if (!run) continue;
+    const slug = run.templateSlug || "unknown";
+    const version = run.templateVersion || "unknown";
+    const key = `${slug}__${version}`;
 
-  const byOptIn = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    where: { promptLabOptIn: true },
-    _count: { _all: true },
-  });
-
-  const byIncognito = await prisma.refineEvent.groupBy({
-    by: ["templateId", "templateVersion"],
-    where: { isIncognito: true },
-    _count: { _all: true },
-  });
-
-  function toKey(tid: string, ver: string) {
-    return `${tid}__${ver}`;
-  }
-
-  const map = new Map<
-    string,
-    {
-      templateId: string;
-      templateVersion: string;
-      usageCount: number;
-      acceptedCount: number;
-      revertedCount: number;
-      heavyEditCount: number;
-      optInCount: number;
-      incognitoCount: number;
+    let agg = map.get(key);
+    if (!agg) {
+      agg = {
+        templateSlug: slug,
+        templateVersion: version,
+        usageCount: 0,
+        runCount: 0,
+        sampleCount: 0,
+        syntheticCount: 0,
+        sumStructure: 0,
+        sumContract: 0,
+        sumDomain: 0,
+        sumOverall: 0,
+        countStructure: 0,
+        countContract: 0,
+        countDomain: 0,
+        countOverall: 0,
+        lastRunAt: run.createdAt ?? null,
+      };
+      map.set(key, agg);
     }
-  >();
 
-  for (const r of byUsage) {
-    const k = toKey(r.templateId, r.templateVersion);
-    map.set(k, {
-      templateId: r.templateId,
+    // Count this labScore usage
+    agg.usageCount += 1;
+
+    // Sum scores if present
+    if (
+      typeof s.structureScore === "number" &&
+      !Number.isNaN(s.structureScore)
+    ) {
+      agg.sumStructure += s.structureScore;
+      agg.countStructure += 1;
+    }
+    if (typeof s.contractScore === "number" && !Number.isNaN(s.contractScore)) {
+      agg.sumContract += s.contractScore;
+      agg.countContract += 1;
+    }
+    if (typeof s.domainScore === "number" && !Number.isNaN(s.domainScore)) {
+      agg.sumDomain += s.domainScore;
+      agg.countDomain += 1;
+    }
+    if (typeof s.overallScore === "number" && !Number.isNaN(s.overallScore)) {
+      agg.sumOverall += s.overallScore;
+      agg.countOverall += 1;
+    }
+
+    // Count run-level metrics once per labRun
+    if (run.id && !seenRunIds.has(run.id)) {
+      seenRunIds.add(run.id);
+      agg.runCount += 1;
+      if (run.taskType === "sample") agg.sampleCount += 1;
+      else if (run.taskType === "synthetic") agg.syntheticCount += 1;
+
+      // lastRunAt = most recent createdAt
+      const createdAt = run.createdAt ? new Date(run.createdAt) : null;
+      if (createdAt) {
+        if (!agg.lastRunAt || createdAt > agg.lastRunAt)
+          agg.lastRunAt = createdAt;
+      }
+    }
+  }
+
+  // Convert map -> rows with averages
+  const templateRows = Array.from(map.values()).map((r) => {
+    const avgStructure = r.countStructure
+      ? r.sumStructure / r.countStructure
+      : null;
+    const avgContract = r.countContract
+      ? r.sumContract / r.countContract
+      : null;
+    const avgDomain = r.countDomain ? r.sumDomain / r.countDomain : null;
+    const avgOverall = r.countOverall ? r.sumOverall / r.countOverall : null;
+    return {
+      templateSlug: r.templateSlug,
       templateVersion: r.templateVersion,
-      usageCount: r._count._all,
-      acceptedCount: 0,
-      revertedCount: 0,
-      heavyEditCount: 0,
-      optInCount: 0,
-      incognitoCount: 0,
-    });
-  }
+      usageCount: r.usageCount,
+      runCount: r.runCount,
+      sampleCount: r.sampleCount,
+      syntheticCount: r.syntheticCount,
+      avgStructure,
+      avgContract,
+      avgDomain,
+      avgOverall,
+      lastRunAt: r.lastRunAt ? new Date(r.lastRunAt) : null,
+    };
+  });
 
-  // Manually merge each bucket
-  for (const r of byAccepted) {
-    const k = toKey(r.templateId, r.templateVersion);
-    const cur = map.get(k);
-    if (cur) cur.acceptedCount = r._count._all;
-  }
-  for (const r of byReverted) {
-    const k = toKey(r.templateId, r.templateVersion);
-    const cur = map.get(k);
-    if (cur) cur.revertedCount = r._count._all;
-  }
-  for (const r of byHeavy) {
-    const k = toKey(r.templateId, r.templateVersion);
-    const cur = map.get(k);
-    if (cur) cur.heavyEditCount = r._count._all;
-  }
-  for (const r of byOptIn) {
-    const k = toKey(r.templateId, r.templateVersion);
-    const cur = map.get(k);
-    if (cur) cur.optInCount = r._count._all;
-  }
-  for (const r of byIncognito) {
-    const k = toKey(r.templateId, r.templateVersion);
-    const cur = map.get(k);
-    if (cur) cur.incognitoCount = r._count._all;
-  }
+  // Sort by avgOverall desc (nulls last), then usageCount desc
+  templateRows.sort((a, b) => {
+    const aScore = typeof a.avgOverall === "number" ? a.avgOverall : -1;
+    const bScore = typeof b.avgOverall === "number" ? b.avgOverall : -1;
+    if (bScore !== aScore) return bScore - aScore;
+    return b.usageCount - a.usageCount;
+  });
 
-  const templateRows = Array.from(map.values()).sort(
-    (a, b) => b.usageCount - a.usageCount
-  );
+  // Global average overall (across all scores)
+  const overallValues: number[] = [];
+  for (const r of templateRows) {
+    if (typeof r.avgOverall === "number") overallValues.push(r.avgOverall);
+  }
+  const avgOverallScore =
+    overallValues.length > 0
+      ? overallValues.reduce((a, b) => a + b, 0) / overallValues.length
+      : null;
 
   return {
     top: {
-      totalRefines,
-      distinctTemplateSlugs: distinctTemplates.length,
-      optInCount,
-      incognitoCount,
+      totalLabRuns,
+      totalLabScores,
+      templatesEvaluated: templateRows.length,
+      avgOverallScore,
     },
     templateRows,
   };
@@ -456,24 +492,7 @@ export default async function PromptLabAdminPage({
     );
   }
 
-  let data: {
-    top: {
-      totalRefines: number;
-      distinctTemplateSlugs: number;
-      optInCount: number;
-      incognitoCount: number;
-    };
-    templateRows: Array<{
-      templateId: string;
-      templateVersion: string;
-      usageCount: number;
-      acceptedCount: number;
-      revertedCount: number;
-      heavyEditCount: number;
-      optInCount: number;
-      incognitoCount: number;
-    }>;
-  } | null = null;
+  let data: any = null;
   let loadError = false;
 
   try {
@@ -679,38 +698,52 @@ export default async function PromptLabAdminPage({
                       <th className="px-3 py-2 font-normal">Template</th>
                       <th className="px-3 py-2 font-normal">Version</th>
                       <th className="px-3 py-2 font-normal">Usage</th>
-                      <th className="px-3 py-2 font-normal">Accept %</th>
-                      <th className="px-3 py-2 font-normal">Heavy-edit %</th>
-                      <th className="px-3 py-2 font-normal">Opt-in %</th>
-                      <th className="px-3 py-2 font-normal">Incognito %</th>
+                      <th className="px-3 py-2 font-normal">Avg Structure</th>
+                      <th className="px-3 py-2 font-normal">Avg Contract</th>
+                      <th className="px-3 py-2 font-normal">Avg Domain</th>
+                      <th className="px-3 py-2 font-normal">Avg Overall</th>
+                      <th className="px-3 py-2 font-normal">Sample %</th>
+                      <th className="px-3 py-2 font-normal">Last run</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800 text-zinc-200">
-                    {data.templateRows.map((row) => {
+                    {data.templateRows.map((row: any) => {
                       const usage = row.usageCount || 1;
-                      const acceptPct = Math.round(
-                        (row.acceptedCount / usage) * 100
+                      const samplePct = Math.round(
+                        (row.sampleCount / Math.max(1, row.runCount)) * 100
                       );
-                      const heavyPct = Math.round(
-                        (row.heavyEditCount / usage) * 100
-                      );
-                      const optInPct = Math.round(
-                        (row.optInCount / usage) * 100
-                      );
-                      const incogPct = Math.round(
-                        (row.incognitoCount / usage) * 100
-                      );
+                      const formatScore = (v: number | null) =>
+                        typeof v === "number"
+                          ? (v * 100).toFixed(0) + "%"
+                          : "—";
                       return (
-                        <tr key={`${row.templateId}__${row.templateVersion}`}>
+                        <tr key={`${row.templateSlug}__${row.templateVersion}`}>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.templateId}
+                            {row.templateSlug}
                           </td>
                           <td className="px-3 py-2">{row.templateVersion}</td>
                           <td className="px-3 py-2">{row.usageCount}</td>
-                          <td className="px-3 py-2">{acceptPct}%</td>
-                          <td className="px-3 py-2">{heavyPct}%</td>
-                          <td className="px-3 py-2">{optInPct}%</td>
-                          <td className="px-3 py-2">{incogPct}%</td>
+                          <td className="px-3 py-2">
+                            {formatScore(row.avgStructure)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {formatScore(row.avgContract)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {formatScore(row.avgDomain)}
+                          </td>
+                          <td className="px-3 py-2 font-semibold">
+                            {formatScore(row.avgOverall)}
+                          </td>
+                          <td className="px-3 py-2">{samplePct}%</td>
+                          <td className="px-3 py-2">
+                            {row.lastRunAt
+                              ? new Date(row.lastRunAt)
+                                  .toISOString()
+                                  .slice(0, 19)
+                                  .replace("T", " ")
+                              : "—"}
+                          </td>
                         </tr>
                       );
                     })}
