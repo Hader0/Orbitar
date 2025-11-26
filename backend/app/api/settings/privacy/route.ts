@@ -59,10 +59,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data,
-    });
+    // Ensure the user exists to avoid Prisma P2025 ("Record to update not found")
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) {
+      console.warn(`Privacy settings update: user not found (id=${userId})`);
+      return jsonCors({ error: "User not found" }, 404);
+    }
+
+    let updated;
+    try {
+      updated = await prisma.user.update({
+        where: { id: userId },
+        data,
+      });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        console.warn(
+          `Privacy settings update P2025: user not found (id=${userId})`
+        );
+        return jsonCors({ error: "User not found" }, 404);
+      }
+      throw err;
+    }
 
     const u = updated as any;
 

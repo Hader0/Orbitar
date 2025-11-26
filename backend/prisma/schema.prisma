@@ -3,65 +3,59 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  apiKeys       ApiKey[]
-
-  plan              String    @default("free") // free, builder, pro
-  dailyUsageCount   Int       @default(0)
-  dailyUsageResetAt DateTime  @default(now())
-  stripeCustomerId  String?
-  stripeSubscriptionId String?
+  id                       String                   @id @default(cuid())
+  name                     String?
+  email                    String?                  @unique
+  emailVerified            DateTime?
+  image                    String?
+  plan                     String                   @default("free")
+  dailyUsageCount          Int                      @default(0)
+  dailyUsageResetAt        DateTime                 @default(now())
+  stripeCustomerId         String?
+  stripeSubscriptionId     String?
   stripeSubscriptionStatus String?
-
-  allowDataUse      Boolean   @default(false)
-  defaultIncognito  Boolean   @default(false)
-  promptLabOptIn    Boolean   @default(false)
-
-  promptEvents      PromptEvent[]
-  refineEvents      RefineEvent[]
-
-  templatePreferences UserTemplatePreference[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  allowDataUse             Boolean                  @default(false)
+  defaultIncognito         Boolean                  @default(false)
+  promptLabOptIn           Boolean                  @default(false)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  accounts                 Account[]
+  apiKeys                  ApiKey[]
+  promptEvents             PromptEvent[]
+  sessions                 Session[]
+  templatePreferences      UserTemplatePreference[]
+  refineEvents             RefineEvent[]
 }
 
 model ApiKey {
-  id        String   @id @default(cuid())
-  key       String   @unique // In a real app, hash this. For simplicity here, we might keep it plain or hash it.
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  key        String    @unique
+  userId     String
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
-  revoked    Boolean  @default(false)
+  revoked    Boolean   @default(false)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -83,74 +77,60 @@ model VerificationToken {
 }
 
 model PromptEvent {
-  id           String    @id @default(cuid())
-  createdAt    DateTime  @default(now())
-
-  user         User?     @relation(fields: [userId], references: [id])
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
   userId       String?
-
-  plan         String?   // e.g. "free", "light", "pro"
-  source       String?   // "chatgpt", "notion", etc.
+  plan         String?
+  source       String?
   category     String?
   templateId   String?
   model        String?
-  modelStyle   String?   // "fast", "precise", etc.
+  modelStyle   String?
   latencyMs    Int?
-  status       String?   // "success", "error_<type>"
+  status       String?
   inputTokens  Int?
   outputTokens Int?
-  incognito    Boolean?  // whether this refine was incognito
+  incognito    Boolean?
+  user         User?    @relation(fields: [userId], references: [id])
 }
 
 model UserTemplatePreference {
-  id         String @id @default(cuid())
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String  @id @default(cuid())
   userId     String
   templateId String
   enabled    Boolean @default(true)
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, templateId])
 }
 
 model RefineEvent {
-  id                 String     @id @default(cuid())
-  createdAt          DateTime   @default(now())
-
-  user               User?      @relation(fields: [userId], references: [id])
+  id                 String         @id @default(cuid())
+  createdAt          DateTime       @default(now())
   userId             String?
-
   plan               String
   category           String
   templateId         String
   templateVersion    String
-
   rawTextLength      Int
   refinedTextLength  Int
-
   acceptedAt         DateTime?
-  reverted           Boolean    @default(false)
-  // Allowed values: "none" | "light" | "heavy"
+  reverted           Boolean        @default(false)
   editDistanceBucket String?
-
-  promptLabOptIn     Boolean    @default(false)
-  isIncognito        Boolean    @default(false)
-
+  promptLabOptIn     Boolean        @default(false)
+  isIncognito        Boolean        @default(false)
   promptSamples      PromptSample[]
+  user               User?          @relation(fields: [userId], references: [id])
 
   @@map("refine_events")
 }
 
-//
-// Prompt Lab core tables (schema only)
-//
-
 model SyntheticTask {
   id         String   @id @default(cuid())
-  category   String   // e.g. "coding" | "writing" | ...
+  category   String
   inputText  String
-  difficulty String?  // optional, e.g. "easy" | "medium" | "hard"
-  tags       String?  // JSON string (SQLite lacks native Json)
-
+  difficulty String?
+  tags       String?
   createdAt  DateTime @default(now())
   labRuns    LabRun[]
 }
@@ -158,55 +138,44 @@ model SyntheticTask {
 model PromptSample {
   id              String       @id @default(cuid())
   refineEventId   String?
-  refineEvent     RefineEvent? @relation(fields: [refineEventId], references: [id])
-
-  source          String       // e.g. "user_opt_in" | "internal" | "other"
+  source          String
   category        String
   rawText         String
   refinedText     String?
   plan            String
   templateSlug    String?
   templateVersion String?
-
   createdAt       DateTime     @default(now())
-
   labRuns         LabRun[]
+  refineEvent     RefineEvent? @relation(fields: [refineEventId], references: [id])
 }
 
 model LabRun {
   id               String         @id @default(cuid())
   templateSlug     String
   templateVersion  String
-  taskType         String         // "synthetic" | "sample"
-
+  taskType         String
   syntheticTaskId  String?
-  syntheticTask    SyntheticTask? @relation(fields: [syntheticTaskId], references: [id])
-
   promptSampleId   String?
-  promptSample     PromptSample?  @relation(fields: [promptSampleId], references: [id])
-
   modelName        String
-  status           String         // "pending" | "running" | "done" | "error"
+  status           String
   errorMessage     String?
-
   rawRefinedPrompt String?
-
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-
+  promptSample     PromptSample?  @relation(fields: [promptSampleId], references: [id])
+  syntheticTask    SyntheticTask? @relation(fields: [syntheticTaskId], references: [id])
   scores           LabScore[]
 }
 
 model LabScore {
-  id             String  @id @default(cuid())
+  id             String   @id @default(cuid())
   labRunId       String
-  labRun         LabRun  @relation(fields: [labRunId], references: [id])
-
   structureScore Float?
   contractScore  Float?
   domainScore    Float?
   overallScore   Float?
-  metricsJson    String?  // JSON string (SQLite lacks native Json)
-
+  metricsJson    String?
   createdAt      DateTime @default(now())
+  labRun         LabRun   @relation(fields: [labRunId], references: [id])
 }
