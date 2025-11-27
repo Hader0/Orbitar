@@ -30,22 +30,50 @@ export type TemplateId =
   | "coding_feature"
   | "coding_debug"
   | "coding_refactor"
+  | "coding_review"
+  | "coding_optimize"
+  | "coding_documentation"
+  | "coding_api"
+  | "coding_database"
+  | "coding_architecture"
+  | "coding_security"
+  | "coding_migration"
+  | "coding_website"
   | "coding_tests"
   | "coding_explain"
   | "writing_blog"
+  | "writing_newsletter"
+  | "writing_doc"
+  | "writing_press_release"
+  | "writing_product_desc"
   | "writing_twitter_thread"
   | "writing_linkedin_post"
   | "writing_email"
   | "writing_landing_page"
   | "research_summarize"
+  | "research_analysis"
+  | "research_trends"
+  | "research_competitive"
   | "research_compare"
   | "research_extract_points"
   | "planning_roadmap"
+  | "planning_project"
+  | "planning_strategy"
+  | "planning_timeline"
   | "planning_feature_spec"
   | "planning_meeting_notes"
   | "communication_reply"
+  | "communication_translate"
+  | "communication_simplify"
+  | "communication_professional"
   | "communication_tone_adjust"
   | "creative_story"
+  | "creative_slogan"
+  | "creative_poem"
+  | "creative_script"
+  | "creative_naming"
+  | "creative_worldbuilding"
+  | "creative_character"
   | "creative_brainstorm"
   | "general_general";
 
@@ -104,6 +132,72 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     status: "ga",
     minPlan: "builder",
   },
+  coding_review: {
+    category: "coding",
+    label: "Code review",
+    description: "Review code for correctness, clarity, and maintainability",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_optimize: {
+    category: "coding",
+    label: "Optimize performance",
+    description:
+      "Improve performance, reduce complexity, and remove bottlenecks",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_documentation: {
+    category: "coding",
+    label: "Write documentation",
+    description:
+      "Generate or improve technical documentation for code and APIs",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_api: {
+    category: "coding",
+    label: "Design API",
+    description: "Design or refine API surfaces, contracts, and endpoints",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_database: {
+    category: "coding",
+    label: "Database schema",
+    description: "Design or evolve database schemas and migrations",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_architecture: {
+    category: "coding",
+    label: "System architecture",
+    description: "Define or evolve system architecture and high-level design",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_security: {
+    category: "coding",
+    label: "Security review",
+    description: "Review code and flows for security issues and mitigations",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_migration: {
+    category: "coding",
+    label: "Code migration",
+    description:
+      "Plan and implement migrations between versions, stacks, or patterns",
+    status: "beta",
+    minPlan: "free",
+  },
+  coding_website: {
+    category: "coding",
+    label: "Build website",
+    description: "Implement or refine web UI pages and frontend experiences",
+    status: "beta",
+    minPlan: "free",
+  },
   coding_tests: {
     category: "coding",
     label: "Write tests",
@@ -125,6 +219,35 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     label: "Blog post",
     description: "Draft a blog post with outline-first approach",
     status: "ga",
+    minPlan: "free",
+  },
+  writing_newsletter: {
+    category: "writing",
+    label: "Newsletter",
+    description: "Draft newsletter content with clear structure and hooks",
+    status: "beta",
+    minPlan: "free",
+  },
+  writing_doc: {
+    category: "writing",
+    label: "Documentation",
+    description: "Write or refine product or technical documentation",
+    status: "beta",
+    minPlan: "free",
+  },
+  writing_press_release: {
+    category: "writing",
+    label: "Press release",
+    description: "Craft structured press releases with strong narratives",
+    status: "beta",
+    minPlan: "free",
+  },
+  writing_product_desc: {
+    category: "writing",
+    label: "Product description",
+    description:
+      "Write compelling product descriptions with benefits and details",
+    status: "beta",
     minPlan: "free",
   },
   writing_twitter_thread: {
@@ -164,6 +287,27 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     status: "ga",
     minPlan: "free",
   },
+  research_analysis: {
+    category: "research",
+    label: "Market analysis",
+    description: "Analyze markets, segments, and competitive positioning",
+    status: "beta",
+    minPlan: "free",
+  },
+  research_trends: {
+    category: "research",
+    label: "Trend analysis",
+    description: "Identify and explain trends over time from source material",
+    status: "beta",
+    minPlan: "free",
+  },
+  research_competitive: {
+    category: "research",
+    label: "Competitive research",
+    description: "Compare competitors, positioning, and strengths/weaknesses",
+    status: "beta",
+    minPlan: "free",
+  },
   research_compare: {
     category: "research",
     label: "Compare options",
@@ -185,6 +329,27 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     label: "Roadmap / plan",
     description: "Milestones, scope, risks, dependencies",
     status: "ga",
+    minPlan: "free",
+  },
+  planning_project: {
+    category: "planning",
+    label: "Project plan",
+    description: "Create structured project plans with phases and owners",
+    status: "beta",
+    minPlan: "free",
+  },
+  planning_strategy: {
+    category: "planning",
+    label: "Strategy document",
+    description: "Outline strategy documents with goals, levers, and risks",
+    status: "beta",
+    minPlan: "free",
+  },
+  planning_timeline: {
+    category: "planning",
+    label: "Timeline / milestones",
+    description: "Design timelines with milestones, dependencies, and dates",
+    status: "beta",
     minPlan: "free",
   },
   planning_feature_spec: {
@@ -210,6 +375,29 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     status: "ga",
     minPlan: "free",
   },
+  communication_translate: {
+    category: "communication",
+    label: "Translate",
+    description:
+      "Translate text between languages while preserving meaning and tone",
+    status: "beta",
+    minPlan: "free",
+  },
+  communication_simplify: {
+    category: "communication",
+    label: "Simplify language",
+    description: "Rewrite text in clearer, simpler language",
+    status: "beta",
+    minPlan: "free",
+  },
+  communication_professional: {
+    category: "communication",
+    label: "Make professional",
+    description:
+      "Polish text into a more professional tone while preserving content",
+    status: "beta",
+    minPlan: "free",
+  },
   communication_tone_adjust: {
     category: "communication",
     label: "Adjust tone",
@@ -224,6 +412,48 @@ export const templateRegistry: Record<TemplateId, TemplateMetadata> = {
     label: "Story / scene",
     description: "Narrative generation with constraints",
     status: "ga",
+    minPlan: "free",
+  },
+  creative_slogan: {
+    category: "creative",
+    label: "Slogan / tagline",
+    description: "Generate memorable slogans and taglines",
+    status: "beta",
+    minPlan: "free",
+  },
+  creative_poem: {
+    category: "creative",
+    label: "Poem / verse",
+    description: "Write poetry or verse to a given brief",
+    status: "beta",
+    minPlan: "free",
+  },
+  creative_script: {
+    category: "creative",
+    label: "Script / dialogue",
+    description: "Write scripts or dialogue with character and scene context",
+    status: "beta",
+    minPlan: "free",
+  },
+  creative_naming: {
+    category: "creative",
+    label: "Name ideas",
+    description: "Generate naming options for products, features, or brands",
+    status: "beta",
+    minPlan: "free",
+  },
+  creative_worldbuilding: {
+    category: "creative",
+    label: "Worldbuilding",
+    description: "Develop settings, lore, and world details",
+    status: "beta",
+    minPlan: "free",
+  },
+  creative_character: {
+    category: "creative",
+    label: "Character development",
+    description: "Develop characters, backstories, and motivations",
+    status: "beta",
     minPlan: "free",
   },
   creative_brainstorm: {
@@ -283,6 +513,104 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     qualityRules:
       "Maintain backward compatibility unless told otherwise. Improve without over-engineering.",
   },
+  coding_review: {
+    baseRole:
+      "a senior code reviewer who ensures code quality, security, and maintainability",
+    goalType: "review code for correctness and best practices",
+    contextHints:
+      "Preserve code context, language idioms, and any specific review focus areas",
+    outputHints:
+      "Structured review with summary, critical issues, suggestions, and nitpicks",
+    qualityRules:
+      "Be constructive. Focus on high-impact issues first. Explain 'why' for every suggestion.",
+  },
+  coding_optimize: {
+    baseRole:
+      "a performance engineer who specializes in optimization and efficiency",
+    goalType: "optimize code for performance and resource usage",
+    contextHints:
+      "Preserve algorithmic logic but look for bottlenecks. Note any specific constraints (memory, CPU).",
+    outputHints:
+      "Optimized code with explanations of improvements. Benchmarks or complexity analysis if relevant.",
+    qualityRules:
+      "Don't sacrifice readability unless necessary. Verify correctness is maintained.",
+  },
+  coding_documentation: {
+    baseRole:
+      "a technical writer who creates clear, comprehensive developer documentation",
+    goalType: "write or improve technical documentation",
+    contextHints:
+      "Preserve API signatures, usage examples, and key concepts. Note target audience.",
+    outputHints:
+      "Clear, structured documentation. Usage examples, parameter descriptions, and return values.",
+    qualityRules:
+      "Be accurate and up-to-date. Use clear, concise language. Include examples.",
+  },
+  coding_api: {
+    baseRole:
+      "an API designer who crafts clean, intuitive, and robust interfaces",
+    goalType: "design or refine an API surface",
+    contextHints:
+      "Preserve domain concepts and data models. Note protocol (REST, GraphQL, etc.).",
+    outputHints:
+      "API definition (OpenAPI, TypeScript interfaces, etc.). Endpoints, request/response schemas.",
+    qualityRules:
+      "Follow standard conventions. Ensure consistency. Consider versioning and evolution.",
+  },
+  coding_database: {
+    baseRole: "a database architect who designs efficient and scalable schemas",
+    goalType: "design or modify database schema",
+    contextHints:
+      "Preserve data relationships and access patterns. Note database technology (SQL, NoSQL).",
+    outputHints:
+      "Schema definitions (SQL DDL, Prisma, etc.). Entity relationship diagrams or descriptions.",
+    qualityRules:
+      "Normalize where appropriate. Index for query performance. Ensure data integrity.",
+  },
+  coding_architecture: {
+    baseRole:
+      "a system architect who designs scalable and maintainable systems",
+    goalType: "design system architecture or high-level design",
+    contextHints:
+      "Preserve system requirements, constraints, and integration points.",
+    outputHints:
+      "High-level design description. Component diagrams (Mermaid or text). Data flow.",
+    qualityRules:
+      "Address non-functional requirements (scalability, reliability). Justify design choices.",
+  },
+  coding_security: {
+    baseRole:
+      "a security engineer who identifies vulnerabilities and recommends mitigations",
+    goalType: "review code for security issues",
+    contextHints:
+      "Preserve code logic and data flow. Note sensitivity of data.",
+    outputHints:
+      "Security assessment. List of vulnerabilities with severity and remediation steps.",
+    qualityRules:
+      "Focus on OWASP Top 10 and common pitfalls. Be specific about risks.",
+  },
+  coding_migration: {
+    baseRole:
+      "a migration specialist who plans and executes safe code transitions",
+    goalType: "plan or implement a code migration",
+    contextHints:
+      "Preserve business logic while changing implementation. Note source and target states.",
+    outputHints:
+      "Migration plan or migrated code. Step-by-step instructions. Rollback strategy.",
+    qualityRules:
+      "Minimize downtime/risk. Ensure data consistency. Verify parity.",
+  },
+  coding_website: {
+    baseRole:
+      "a frontend engineer who builds accessible, responsive, and performant web interfaces",
+    goalType: "implement or refine a website or web page",
+    contextHints:
+      "Preserve design specs, content, and brand guidelines. Note framework (React, HTML/CSS).",
+    outputHints:
+      "Frontend code (HTML/CSS/JS or components). Responsive layout. Accessibility attributes.",
+    qualityRules:
+      "Semantic HTML. Responsive design. Accessible (WCAG). Performant.",
+  },
   coding_tests: {
     baseRole:
       "a test engineer who writes comprehensive, maintainable test suites",
@@ -319,6 +647,45 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
       "First outline, then draft. Include intro, body sections, and conclusion. Specify word count if given. The content must be about the user's subject.",
     qualityRules:
       "No fluff. Use concrete examples from the user's notes. Match specified tone. Hook the reader early. Never replace user's subject with generic topics.",
+  },
+  writing_newsletter: {
+    baseRole: "a newsletter editor who curates engaging and valuable content",
+    goalType: "write a newsletter issue",
+    contextHints:
+      "Preserve user's topics, links, and updates. Note audience and frequency.",
+    outputHints: "Subject line, intro, main sections, outro. engaging hooks.",
+    qualityRules: "Personal connection. Value-driven. Consistent voice.",
+  },
+  writing_doc: {
+    baseRole: "a technical communicator who writes clear product documentation",
+    goalType: "write product or user documentation",
+    contextHints:
+      "Preserve feature details and user workflows. Note audience level.",
+    outputHints:
+      "Structured documentation. How-to guides, FAQs, or reference material.",
+    qualityRules:
+      "Clear instructions. Visuals (described) where helpful. Anticipate user questions.",
+  },
+  writing_press_release: {
+    baseRole: "a PR specialist who crafts compelling announcements for media",
+    goalType: "write a press release",
+    contextHints:
+      "Preserve key facts, quotes, and boilerplate. Note target media outlets.",
+    outputHints:
+      "Standard press release format. Headline, dateline, body, boilerplate, contact info.",
+    qualityRules:
+      "Newsworthy angle. Inverted pyramid structure. Professional tone.",
+  },
+  writing_product_desc: {
+    baseRole:
+      "a product marketer who highlights benefits and features persuasively",
+    goalType: "write product descriptions",
+    contextHints:
+      "Preserve product specs and key selling points. Note target customer.",
+    outputHints:
+      "Compelling title, benefits-focused description, feature list.",
+    qualityRules:
+      "Focus on value/benefits. Evocative language. SEO-friendly keywords.",
   },
   writing_twitter_thread: {
     baseRole:
@@ -401,6 +768,35 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     qualityRules:
       "Be comprehensive but not redundant. Attribute claims. Highlight uncertainties.",
   },
+  research_analysis: {
+    baseRole:
+      "a market analyst who provides deep insights into market dynamics",
+    goalType: "analyze a market or industry",
+    contextHints:
+      "Preserve data points, trends, and segments. Note specific questions to answer.",
+    outputHints:
+      "Market overview, segmentation, trends, opportunities/threats.",
+    qualityRules: "Data-driven. Objective. actionable insights.",
+  },
+  research_trends: {
+    baseRole:
+      "a trend forecaster who identifies and explains emerging patterns",
+    goalType: "analyze trends",
+    contextHints: "Preserve timeframes and data sources. Note specific domain.",
+    outputHints: "List of trends with descriptions, drivers, and implications.",
+    qualityRules:
+      "Distinguish signal from noise. Forward-looking. Evidence-based.",
+  },
+  research_competitive: {
+    baseRole:
+      "a competitive intelligence analyst who benchmarks against competitors",
+    goalType: "conduct competitive research",
+    contextHints: "Preserve competitor list and comparison criteria.",
+    outputHints:
+      "Competitor profiles. Feature/strategy comparison. SWOT analysis.",
+    qualityRules:
+      "Fair and balanced. Focus on differentiators. Strategic implications.",
+  },
 
   // Planning behaviors
   planning_roadmap: {
@@ -435,6 +831,33 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     qualityRules:
       "Action items must have owners and deadlines. Decisions should have rationale. Be concise.",
   },
+  planning_project: {
+    baseRole: "a project manager who structures work for successful delivery",
+    goalType: "create a project plan",
+    contextHints:
+      "Preserve goals, scope, and resources. Note methodology (Agile, Waterfall).",
+    outputHints: "Project charter, WBS, schedule, resource plan.",
+    qualityRules:
+      "Clear scope. Realistic resource allocation. Defined success metrics.",
+  },
+  planning_strategy: {
+    baseRole:
+      "a strategic planner who defines long-term goals and how to achieve them",
+    goalType: "develop a strategy document",
+    contextHints:
+      "Preserve mission, vision, and market context. Note time horizon.",
+    outputHints: "Strategic pillars, goals, initiatives, KPIs.",
+    qualityRules:
+      "Coherent logic. Aligned with vision. Actionable high-level steps.",
+  },
+  planning_timeline: {
+    baseRole: "a scheduler who creates realistic and visualized timelines",
+    goalType: "create a timeline or schedule",
+    contextHints: "Preserve key dates, duration, and dependencies.",
+    outputHints:
+      "Chronological list of events or Gantt-style description. Milestones.",
+    qualityRules: "Logical flow. Account for buffers. Clear critical path.",
+  },
 
   // Communication behaviors
   communication_reply: {
@@ -457,6 +880,33 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
     qualityRules:
       "Don't lose information. Match target tone consistently. Preserve intent.",
   },
+  communication_translate: {
+    baseRole:
+      "a professional translator who preserves nuance and tone across languages",
+    goalType: "translate text",
+    contextHints:
+      "Preserve meaning, tone, and specific terminology. Note source and target languages.",
+    outputHints: "Translated text. Cultural adaptation notes if necessary.",
+    qualityRules:
+      "Accurate. Natural sounding in target language. Preserve original intent.",
+  },
+  communication_simplify: {
+    baseRole: "a plain language editor who makes complex content accessible",
+    goalType: "simplify text",
+    contextHints: "Preserve core meaning and facts. Note target reading level.",
+    outputHints: "Simplified text. Short sentences, common words.",
+    qualityRules:
+      "Improve readability. Remove jargon. Don't dumb down ideas, just language.",
+  },
+  communication_professional: {
+    baseRole:
+      "a business communication expert who polishes text for professional contexts",
+    goalType: "make text more professional",
+    contextHints:
+      "Preserve message and intent. Note desired level of formality.",
+    outputHints: "Polished, professional text. Correct grammar and etiquette.",
+    qualityRules: "Courteous. Clear. concise. appropriate for business.",
+  },
 
   // Creative behaviors
   creative_story: {
@@ -478,6 +928,54 @@ const templateBehaviors: Record<TemplateId, TemplateBehavior> = {
       "List of distinct ideas with brief descriptions. Variety in approach and feasibility.",
     qualityRules:
       "Quantity and variety. Include obvious and non-obvious ideas. Brief 'why it could work' for each.",
+  },
+  creative_slogan: {
+    baseRole: "a copywriter who creates memorable hooks and taglines",
+    goalType: "generate slogans or taglines",
+    contextHints:
+      "Preserve brand essence and key message. Note target audience.",
+    outputHints: "List of slogans/taglines. Variations in tone.",
+    qualityRules: "Catchy. Memorable. Aligned with brand identity.",
+  },
+  creative_poem: {
+    baseRole: "a poet who expresses ideas through verse and rhythm",
+    goalType: "write a poem",
+    contextHints:
+      "Preserve theme, mood, and any structural constraints (haiku, sonnet).",
+    outputHints: "Poem in specified style.",
+    qualityRules:
+      "Evocative imagery. Rhythm/meter where appropriate. Emotional resonance.",
+  },
+  creative_script: {
+    baseRole: "a screenwriter who writes compelling dialogue and scenes",
+    goalType: "write a script or dialogue",
+    contextHints: "Preserve characters, setting, and plot action.",
+    outputHints: "Script format (sluglines, action, dialogue).",
+    qualityRules: "Natural dialogue. Show don't tell. Clear pacing.",
+  },
+  creative_naming: {
+    baseRole:
+      "a brand naming specialist who creates unique and available names",
+    goalType: "generate names for a product or brand",
+    contextHints: "Preserve brand attributes and industry context.",
+    outputHints: "List of name ideas. Rationale for each.",
+    qualityRules:
+      "Distinctive. Pronounceable. Memorable. Check for obvious conflicts.",
+  },
+  creative_worldbuilding: {
+    baseRole: "a worldbuilder who creates rich, consistent fictional settings",
+    goalType: "develop worldbuilding details",
+    contextHints: "Preserve genre, tone, and existing lore.",
+    outputHints: "Descriptions of places, history, cultures, or systems.",
+    qualityRules: "Internal consistency. Sensory details. Spark imagination.",
+  },
+  creative_character: {
+    baseRole: "a character designer who creates deep, believable personas",
+    goalType: "develop a character",
+    contextHints: "Preserve role in story and key traits.",
+    outputHints:
+      "Character profile (backstory, personality, appearance, motivation).",
+    qualityRules: "Complex motivations. Distinct voice. Flaws and strengths.",
   },
 
   // General behavior
@@ -550,22 +1048,50 @@ export type TemplateSlug =
   | "coding_feature_default"
   | "coding_debug_default"
   | "coding_refactor_default"
+  | "coding_review_default"
+  | "coding_optimize_default"
+  | "coding_documentation_default"
+  | "coding_api_default"
+  | "coding_database_default"
+  | "coding_architecture_default"
+  | "coding_security_default"
+  | "coding_migration_default"
+  | "coding_website_default"
   | "coding_tests_default"
   | "coding_explain_default"
   | "writing_blog_default"
+  | "writing_newsletter_default"
+  | "writing_doc_default"
+  | "writing_press_release_default"
+  | "writing_product_desc_default"
   | "writing_twitter_thread_default"
   | "writing_linkedin_post_default"
   | "writing_email_default"
   | "writing_landing_page_default"
   | "research_summarize_default"
+  | "research_analysis_default"
+  | "research_trends_default"
+  | "research_competitive_default"
   | "research_compare_default"
   | "research_extract_points_default"
   | "planning_roadmap_default"
+  | "planning_project_default"
+  | "planning_strategy_default"
+  | "planning_timeline_default"
   | "planning_feature_spec_default"
   | "planning_meeting_notes_default"
   | "communication_reply_default"
+  | "communication_translate_default"
+  | "communication_simplify_default"
+  | "communication_professional_default"
   | "communication_tone_adjust_default"
   | "creative_story_default"
+  | "creative_slogan_default"
+  | "creative_poem_default"
+  | "creative_script_default"
+  | "creative_naming_default"
+  | "creative_worldbuilding_default"
+  | "creative_character_default"
   | "creative_brainstorm_default"
   | "general_general_default";
 
@@ -585,22 +1111,50 @@ export const templateVersionRegistry: Record<TemplateSlug, string> = {
   coding_feature_default: "1.0.0",
   coding_debug_default: "1.0.0",
   coding_refactor_default: "1.0.0",
+  coding_review_default: "1.0.0",
+  coding_optimize_default: "1.0.0",
+  coding_documentation_default: "1.0.0",
+  coding_api_default: "1.0.0",
+  coding_database_default: "1.0.0",
+  coding_architecture_default: "1.0.0",
+  coding_security_default: "1.0.0",
+  coding_migration_default: "1.0.0",
+  coding_website_default: "1.0.0",
   coding_tests_default: "1.0.0",
   coding_explain_default: "1.0.0",
   writing_blog_default: "1.0.0",
+  writing_newsletter_default: "1.0.0",
+  writing_doc_default: "1.0.0",
+  writing_press_release_default: "1.0.0",
+  writing_product_desc_default: "1.0.0",
   writing_twitter_thread_default: "1.0.0",
   writing_linkedin_post_default: "1.0.0",
   writing_email_default: "1.0.0",
   writing_landing_page_default: "1.0.0",
   research_summarize_default: "1.0.0",
+  research_analysis_default: "1.0.0",
+  research_trends_default: "1.0.0",
+  research_competitive_default: "1.0.0",
   research_compare_default: "1.0.0",
   research_extract_points_default: "1.0.0",
   planning_roadmap_default: "1.0.0",
+  planning_project_default: "1.0.0",
+  planning_strategy_default: "1.0.0",
+  planning_timeline_default: "1.0.0",
   planning_feature_spec_default: "1.0.0",
   planning_meeting_notes_default: "1.0.0",
   communication_reply_default: "1.0.0",
+  communication_translate_default: "1.0.0",
+  communication_simplify_default: "1.0.0",
+  communication_professional_default: "1.0.0",
   communication_tone_adjust_default: "1.0.0",
   creative_story_default: "1.0.0",
+  creative_slogan_default: "1.0.0",
+  creative_poem_default: "1.0.0",
+  creative_script_default: "1.0.0",
+  creative_naming_default: "1.0.0",
+  creative_worldbuilding_default: "1.0.0",
+  creative_character_default: "1.0.0",
   creative_brainstorm_default: "1.0.0",
   general_general_default: "1.0.0",
 } as const;
