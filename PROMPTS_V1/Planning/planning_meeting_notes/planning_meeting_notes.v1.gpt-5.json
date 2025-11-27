@@ -7,7 +7,8 @@
     "goalType": "Optimize for product clarity: concrete decisions, scoped requirements, dependencies, and owner-anchored action items.",
     "contextHints": "Treat transcripts, chat logs, and FILE:/IMAGE: artifacts (agenda, PRD, roadmap, mocks) as authoritative; do not invent. Capture attendees with roles, user problems, proposed solutions, constraints (budget, timeline), and any disagreements or trade-offs. When dates/owners are missing, mark fields as OWNER_TBD or DATE_TBD and note the source snippet.",
     "outputHints": "Sections: Attendees & Roles; Objectives; Topics Discussed (linked to agenda); Decisions (with rationale and scope); Action Items (Task — OWNER — DUE — STATUS — SOURCE); Risks & Dependencies; Open Questions; Parking Lot; Next Milestone/Check-in. Use a consistent action-item format and include SOURCE references (e.g., FILE:prd.doc p.3 or transcript 00:12:10). If owner or due date is unclear, write OWNER_TBD or DATE_TBD explicitly.",
-    "qualityRules": "Decisions must include rationale and scope boundaries; avoid vague summaries. Every action item requires an owner and due date when available, otherwise OWNER_TBD/DATE_TBD. Be concise and non-redundant; merge duplicate items and keep strongest source. Do not add commitments not present in the transcript. This surpasses a naive summary by enforcing decision rationale, dependency tracking, and explicit TBD fields."
+    "qualityRules": "Decisions must include rationale and scope boundaries; avoid vague summaries. Every action item requires an owner and due date when available, otherwise OWNER_TBD/DATE_TBD. Be concise and non-redundant; merge duplicate items and keep strongest source. Do not add commitments not present in the transcript. This surpasses a naive summary by enforcing decision rationale, dependency tracking, and explicit TBD fields.",
+    "origin_model": "gpt-5.1"
   },
   {
     "id": "planning_meeting_notes_v1_eng_standup_002",
@@ -17,7 +18,8 @@
     "goalType": "Optimize for rapid status visibility and unblockers so the team can act immediately.",
     "contextHints": "Rely on transcripts or FILE: stand-up notes and boards; extract 'yesterday/today/blockers', issue/PR IDs, and dates. Preserve attendee names and map items to individuals; include links or IDs exactly as spoken/written. If owners or due dates are missing for follow-ups, mark OWNER_TBD/DATE_TBD and add the SOURCE reference.",
     "outputHints": "Sections: Attendees; Sprint Context (iteration, goals); Team Updates (per person: Yesterday, Today, Blockers); Decisions; New Action Items (Task — OWNER — DUE — STATUS — SOURCE); Risks/Dependencies; Follow-ups & Reminders. Keep bullets short, include ticket/PR links where mentioned, and ensure each blocker has a next step owner. Use OWNER_TBD/DATE_TBD when unspecified.",
-    "qualityRules": "Notes must be skimmable and per-person organized; avoid narrative prose. Each blocker should have a clear next step and owner or OWNER_TBD. Do not invent outcomes; preserve IDs, links, and dates exactly. This exceeds a naive prompt by enforcing per-person updates, explicit blocker ownership, and structured action items with TBD handling."
+    "qualityRules": "Notes must be skimmable and per-person organized; avoid narrative prose. Each blocker should have a clear next step and owner or OWNER_TBD. Do not invent outcomes; preserve IDs, links, and dates exactly. This exceeds a naive prompt by enforcing per-person updates, explicit blocker ownership, and structured action items with TBD handling.",
+    "origin_model": "gpt-5.1"
   },
   {
     "id": "planning_meeting_notes_v1_decision_review_003",
@@ -27,7 +29,8 @@
     "goalType": "Optimize for decision clarity: who decided, what was approved, why, and under what conditions.",
     "contextHints": "Use transcripts and FILE:/IMAGE: (RFCs, slides, decision memos) as ground truth; capture decision-makers vs informeds, evaluation criteria, alternatives considered, and objections. Preserve exact wording for approvals, budgets, and dates; reference page/timestamp for verification. For missing owners or effective dates, write OWNER_TBD/DATE_TBD and flag under Follow-ups.",
     "outputHints": "Sections: Attendees & Roles (D/R/A/C/I if stated); Decision Log (Decision — OWNER — EFFECTIVE DATE — RATIONALE — CRITERIA — ALTERNATIVES — CONDITIONS — SOURCE); Action Items (Task — OWNER — DUE — STATUS — SOURCE); Risks & Mitigations; Open Questions; Next Review/Checkpoint. Ensure each decision lists rationale and any conditions or follow-ups required to make it effective.",
-    "qualityRules": "Decisions must be explicit, attributed, and include rationale and conditions; avoid bundling separate decisions. Every follow-up action needs an owner/date or OWNER_TBD/DATE_TBD. Keep notes concise and verifiable with sources; do not infer consensus. This clearly surpasses a naive summary by producing an auditable decision log with criteria and alternative analysis."
+    "qualityRules": "Decisions must be explicit, attributed, and include rationale and conditions; avoid bundling separate decisions. Every follow-up action needs an owner/date or OWNER_TBD/DATE_TBD. Keep notes concise and verifiable with sources; do not infer consensus. This clearly surpasses a naive summary by producing an auditable decision log with criteria and alternative analysis.",
+    "origin_model": "gpt-5.1"
   },
   {
     "id": "planning_meeting_notes_v1_one_on_one_004",
@@ -37,7 +40,8 @@
     "goalType": "Optimize for growth and accountability: specific feedback, commitments, and next check-ins.",
     "contextHints": "Use transcripts and FILE: goals/rubrics as authoritative; capture wins, concerns, requests, and feedback using SBI (Situation–Behavior–Impact) where possible. Preserve quotes for key examples and any dates or metrics mentioned. If action owners or dates are missing, mark OWNER_TBD/DATE_TBD and list questions under Follow-ups.",
     "outputHints": "Sections: Attendees; Agenda & Topics; Highlights; Feedback (SBI bullets); Decisions/Agreements; Action Items (Task — OWNER — DUE — SUPPORT NEEDED — SOURCE); Open Questions; Resources/Support; Next Check-in (date or DATE_TBD). Keep language neutral and factual; include SOURCE references for key points.",
-    "qualityRules": "Feedback must be evidence-based (SBI) and avoid speculation; keep sensitive info only if present in the transcript. Each action requires an owner/date or explicit OWNER_TBD/DATE_TBD. Be concise and readable, grouping related items to avoid repetition. This beats a generic summary by applying SBI structure and explicit next check-ins with TBD handling."
+    "qualityRules": "Feedback must be evidence-based (SBI) and avoid speculation; keep sensitive info only if present in the transcript. Each action requires an owner/date or explicit OWNER_TBD/DATE_TBD. Be concise and readable, grouping related items to avoid repetition. This beats a generic summary by applying SBI structure and explicit next check-ins with TBD handling.",
+    "origin_model": "gpt-5.1"
   },
   {
     "id": "planning_meeting_notes_v1_retro_postmortem_005",
@@ -47,6 +51,7 @@
     "goalType": "Optimize for learning and prevention: clear timeline, causes, and actionable remediation with owners/dates.",
     "contextHints": "Rely on transcripts and FILE:/IMAGE: (incident reports, logs, dashboards) for facts; extract timestamps, impact metrics, and remediation notes exactly. Distinguish facts from hypotheses and annotate accordingly. If owners or due dates are missing for remediations, mark OWNER_TBD/DATE_TBD and record the source.",
     "outputHints": "Sections: Attendees; Incident/Context Summary; Timeline (timestamp — event — SOURCE); What Went Well; What Was Painful; Contributing Factors/Root Causes (label FACT or HYPOTHESIS); Decisions; Action Items (Remediation — OWNER — DUE — STATUS — SOURCE); Open Questions; Follow-up Review Date (or DATE_TBD); Appendix (links/metrics). Keep bullets tight and include metrics where stated.",
-    "qualityRules": "Maintain blameless, factual tone; clearly mark HYPOTHESIS vs FACT and attribute each item. Every remediation must have an owner and due date or OWNER_TBD/DATE_TBD. Be concise and non-duplicative; merge overlapping events and actions while preserving sources. This surpasses a naive summary by enforcing a timestamped timeline, cause labeling, and rigorous remediation tracking."
+    "qualityRules": "Maintain blameless, factual tone; clearly mark HYPOTHESIS vs FACT and attribute each item. Every remediation must have an owner and due date or OWNER_TBD/DATE_TBD. Be concise and non-duplicative; merge overlapping events and actions while preserving sources. This surpasses a naive summary by enforcing a timestamped timeline, cause labeling, and rigorous remediation tracking.",
+    "origin_model": "gpt-5.1"
   }
 ]
